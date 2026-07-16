@@ -230,7 +230,7 @@
                     
                     this.deliveryDistance = dist;
 
-                    // Escala de precios por rangos de distancia solicitados:
+                    // Escala de precios por rangos de distancia:
                     if (dist < 1.0) {
                         this.deliveryCost = 3.0; // Menor a 1km = S/ 3
                         this.isOutOfRange = false;
@@ -245,11 +245,11 @@
                         this.isOutOfRange = false;
                     } else {
                         this.deliveryCost = 0;
-                        this.isOutOfRange = true; // Más de 9km = Fuera de cobertura (Bloqueado)
+                        this.isOutOfRange = true; // Más de 9km = Fuera de cobertura
                     }
                 },
 
-                // OBTENER UBICACIÓN POR GPS NATIVO Y AUTOCOMPLETAR DIRECCIÓN escrita (OpenStreetMap Gratis)
+                // OBTENER UBICACIÓN POR GPS NATIVO Y AUTOCOMPLETAR DIRECCIÓN
                 getCurrentLocationGPS() {
                     if (!navigator.geolocation) {
                         this.triggerNotification("❌ Tu navegador no soporta geolocalización.");
@@ -270,7 +270,7 @@
                             this.onMarkerMove(lat, lng);
                             this.triggerNotification("✅ GPS fijado correctamente.");
 
-                            // Geocodificación inversa para autocompletar la dirección del cliente
+                            // Geocodificación inversa
                             try {
                                 const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`, {
                                     headers: { 'Accept-Language': 'es' }
@@ -372,7 +372,7 @@
                                 item[header] = val;
                             });
                             
-                            // Sincronización de Horario Activo desde Sheet
+                            // Sincronización de Horario Activo
                             if (item.id === 'horario' || (item.categoria === 'config' && item.nombre === 'Horario Activo')) {
                                 if (item.estado) {
                                     const val = item.estado.toUpperCase().trim();
@@ -508,7 +508,6 @@
                     }
 
                     setTimeout(() => {
-                        // Coordenadas iniciales por defecto (Santa María del Pinar, Piura)
                         const defaultLat = -5.1764;
                         const defaultLng = -80.6406;
 
@@ -563,6 +562,27 @@
                             this.floatingNotification = '';
                         }
                     }, 3500);
+                },
+
+                // FUNCIÓN ROBUSTA DE REDIRECCIONAMIENTO A YAPE (EVITA PANTALLAS EN BLANCO Y CUELGUES)
+                openYapeApp() {
+                    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+                    const isAndroid = /Android/.test(navigator.userAgent);
+                    
+                    if (isAndroid) {
+                        // Intent nativo de Android. Si tiene la app instalada la abre directamente.
+                        // Si no la tiene, abre la Google Play Store en lugar de fallar o quedarse cargando.
+                        window.location.href = "intent://#Intent;scheme=yape;package=com.bcp.innovacp.yape;end";
+                    } else if (isIOS) {
+                        // Redireccionamiento en iOS a través del scheme yape://
+                        window.location.href = "yape://";
+                        setTimeout(() => {
+                            this.triggerNotification("📱 Si no abrió, copia el número y ábrela manualmente.");
+                        }, 2000);
+                    } else {
+                        // En computadoras de escritorio se les notifica de forma interactiva
+                        this.triggerNotification("💻 Opción optimizada para celulares con Yape instalado.");
+                    }
                 },
 
                 sendToWhatsApp() {
@@ -1064,11 +1084,12 @@
                             </div>
                             
                             <div class="text-center pt-1">
-                                <a href="yape://" 
-                                   class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-[#742d8c] hover:bg-[#5c2470] text-white font-extrabold text-xs rounded-xl transition shadow-md">
+                                <button type="button"
+                                        @click="openYapeApp()" 
+                                        class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-[#742d8c] hover:bg-[#5c2470] text-white font-extrabold text-xs rounded-xl transition shadow-md">
                                     <i class="fa-solid fa-mobile-screen-button"></i>
                                     <span>⚡ Abrir App de Yape en mi celular</span>
-                                </a>
+                                </button>
                             </div>
 
                             <p class="text-[10px] text-bb-shadow/80 font-bold text-center leading-normal mt-2">
