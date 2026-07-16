@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BIG BITE — Burgers & Salchipapas</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Righteous&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        bb: {
+                            red: '#A53633',       // Rojo principal de marca
+                            yellow: '#E09C3A',    // Amarillo Queso
+                            cream: '#FAF6F0',     // Fondo crema suave
+                            dark: '#050404',      // Negro puro para contrastes
+                            shadow: '#5A2820',    // Marrón sombras
+                            card: '#FFFFFF',      // Tarjetas de productos
+                            gray: '#F3EFE9'       // Separadores y bordes
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                        brand: ['"Righteous"', 'cursive'],
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        html {
+            scroll-behavior: smooth;
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        /* Corregir el z-index de Leaflet para que no tape los modales */
+        .leaflet-container {
+            z-index: 10 !important;
+        }
+    </style>
+
+    <script>
+        window.bigBiteApp = function() {
+            return {
+                selectedCategory: 'todas',
+                searchTerm: '',
+                cart: [],
+                isCartOpen: false,
+                currentStep: 'cart', // 'cart' o 'checkout'
+                errorMessage: '',
+                floatingNotification: '',
+                isLoadingMenu: true,
+                
+                // Detalle del Producto Ampliado
+                isDetailOpen: false,
+                selectedProductForDetail: null,
+                
+                // Formulario de Checkout
+                checkoutName: '',
+                checkoutPhone: '',
+                checkoutDeliveryType: 'delivery',
+                checkoutAddress: '',
+                checkoutReference: '',
+                checkoutNotes: '',
+                gpsCoords: '',
+                
+                // Sistema de guardado de datos (LocalStorage)
+                saveUserData: false,
+                
+                // Leaflet Map State
+                map: null,
+                marker: null,
+
+                // Logo dinámico inicial / fallback
+                logoUrl: 'https://i.ibb.co/rRx2TLdW/IMG-3702-JPG.jpg',
+
+                categories: [
+                    { id: 'hamburguesas', name: '🍔 Hamburguesas' },
+                    { id: 'salchipapas', name: '🍟 Salchipapas' },
+                    { id: 'bebidas', name: '🥤 Bebidas' },
+                    { id: 'cremas', name: '🍯 Cremas' },
+                    { id: 'extras', name: '🥚 Extras' }
+                ],
+
+                // Lista fallback por si la red falla temporalmente
+                products: [
+                    { 
+                        id: 'peque', 
+                        name: 'Hamburguesa Peque', 
+                        description: '160gr de pura carne artesanal, Pan brioche premium tostado en mantequilla, lechuga fresca y queso cheddar fundido.', 
+                        category: 'hamburguesas', 
+                        price: 15.0,
+                        image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=500&q=80'
+                    },
+                    { 
+                        id: 'porcina', 
+                        name: 'Hamburguesa Porcina', 
+                        description: '160gr de pura carne artesanal, Pan brioche premium tostado en mantequilla, lechuga fresca, queso cheddar, bacon jam de la casa con cebolla caramelizada y tocino crujiente.', 
+                        category: 'hamburguesas', 
+                        price: 18.0,
+                        image: 'https://images.unsplash.com/photo-1553979459-d2229ba7433b?auto=format&fit=crop&w=500&q=80'
+                    },
+                    { 
+                        id: 'salchipapa-brutal', 
+                        name: 'Salchipapa Brutal', 
+                        description: 'Papas fritas amarillas de Piura súper crocantes, salchicha ahumada de primera calidad, todas las cremas artesanales.', 
+                        category: 'salchipapas', 
+                        price: 18.0,
+                        image: 'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?auto=format&fit=crop&w=500&q=80'
+                    },
+                    { 
+                        id: 'chicha-morada', 
+                        name: 'Chicha Morada de la Casa', 
+                        description: 'Chicha de maíz morado natural hervida con canela, clavo y un toque de limón de Piura.', 
+                        category: 'bebidas', 
+                        price: 6.0,
+                        image: 'https://images.unsplash.com/photo-1497534446932-c925b458314e?auto=format&fit=crop&w=500&q=80'
+                    },
+                    { 
+                        id: 'extra-papas', 
+                        name: 'Porción de Papas Crocantes', 
+                        description: 'Papas fritas amarillas ideales para acompañar tu hamburguesa.', 
+                        category: 'extras', 
+                        price: 8.0,
+                        image: 'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?auto=format&fit=crop&w=500&q=80'
+                    }
+                ],
+
+                initData() {
+                    const savedData = localStorage.getItem('bigbite_saved_profile');
+                    if (savedData) {
+                        try {
+                            const parsed = JSON.parse(savedData);
+                            this.checkoutName = parsed.name || '';
+                            this.checkoutPhone = parsed.phone || '';
+                            this.checkoutDeliveryType = parsed.deliveryType || 'delivery';
+                            this.checkoutAddress = parsed.address || '';
+                            this.checkoutReference = parsed.reference || '';
+                            this.saveUserData = true;
+                        } catch (e) {
+                            console.error("Error al cargar perfil guardado", e);
+                        }
+                    }
+                    this.fetchMenu();
+                },
+
+                // LECTOR DE GOOGLE SHEETS EN TIEMPO REAL
+                async fetchMenu() {
+                    this.isLoadingMenu = true;
+                    try {
+                        const sheetId = '1sYGmS70zfowy-NbJ91u7OIJcqhhA4_muLaiKIFecEiI';
+                        const gid = '1102074303';
+                        const url = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=tsv&gid=${gid}`;
+                        
+                        const response = await fetch(url);
+                        if (!response.ok) throw new Error("No se pudo conectar con el servidor de la carta.");
+                        const text = await response.text();
+                        
+                        const lines = text.split(/\r?\n/);
+                        if (lines.length < 2) return;
+                        
+                        // Parsear cabeceras en minúsculas y limpias
+                        const headers = lines[0].split('\t').map(h => h.trim().toLowerCase().replace(/["\r\n]/g, ''));
+                        
+                        const fetchedProducts = [];
+                        let fetchedLogo = this.logoUrl;
+                        
+                        for (let i = 1; i < lines.length; i++) {
+                            const line = lines[i].trim();
+                            if (!line) continue;
+                            
+                            const cols = lines[i].split('\t').map(c => c.trim());
+                            const item = {};
+                            headers.forEach((header, index) => {
+                                let val = cols[index] || '';
+                                if (val.startsWith('"') && val.endsWith('"')) {
+                                    val = val.slice(1, -1); // Limpiar comillas de texto de Google Sheets
+                                }
+                                item[header] = val;
+                            });
+                            
+                            // Detectar si la fila representa al Logo de la marca
+                            if (item.id === 'logo' || item.categoria === 'logo' || item.nombre?.toLowerCase().includes('logo')) {
+                                if (item.imagen_url) {
+                                    fetchedLogo = item.imagen_url;
+                                }
+                                continue;
+                            }
+                            
+                            // Validar que el producto tenga datos requeridos y esté marcado como Disponible
+                            if (item.nombre && item.categoria && item.estado?.toLowerCase() === 'disponible') {
+                                fetchedProducts.push({
+                                    id: item.id || `prod-${i}`,
+                                    name: item.nombre,
+                                    description: item.descripcion || '',
+                                    category: item.categoria.toLowerCase(),
+                                    price: parseFloat(item.precio) || 0,
+                                    image: item.imagen_url || 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=500&q=80'
+                                });
+                            }
+                        }
+                        
+                        if (fetchedProducts.length > 0) {
+                            this.products = fetchedProducts;
+                        }
+                        this.logoUrl = fetchedLogo;
+                    } catch (error) {
+                        console.error("Error cargando Google Sheets en tiempo real:", error);
+                    } finally {
+                        this.isLoadingMenu = false;
+                    }
+                },
+
+                getFilteredProducts(categoryId) {
+                    return this.products.filter(p => {
+                        const matchesCategory = p.category === categoryId;
+                        const matchesSearch = p.name.toLowerCase().includes(this.searchTerm.toLowerCase()) || 
+                                              p.description.toLowerCase().includes(this.searchTerm.toLowerCase());
+                        return matchesCategory && matchesSearch;
+                    });
+                },
+
+                openProductDetail(product) {
+                    this.selectedProductForDetail = product;
+                    this.isDetailOpen = true;
+                },
+
+                shouldShowCategory(categoryId) {
+                    return this.selectedCategory === 'todas' || this.selectedCategory === categoryId;
+                },
+
+                getProductsCountInCategory(categoryId) {
+                    return this.products.filter(p => p.category === categoryId).length;
+                },
+
+                addToCartDirectly(product) {
+                    const existingItem = this.cart.find(item => item.id === product.id);
+                    if (existingItem) {
+                        existingItem.quantity++;
+                    } else {
+                        this.cart.push({
+                            id: product.id,
+                            name: product.name,
+                            price: product.price,
+                            quantity: 1
+                        });
+                    }
+                },
+
+                increaseQty(item) {
+                    item.quantity++;
+                },
+
+                decreaseQty(item) {
+                    if (item.quantity > 1) {
+                        item.quantity--;
+                    } else {
+                        this.removeItem(item);
+                    }
+                },
+
+                removeItem(item) {
+                    this.cart = this.cart.filter(i => i.id !== item.id);
+                },
+
+                getCartItemsCount() {
+                    return this.cart.reduce((sum, item) => sum + item.quantity, 0);
+                },
+
+                getCartTotal() {
+                    return this.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                },
+
+                scrollToMenu(categoryId) {
+                    this.selectedCategory = categoryId;
+                    setTimeout(() => {
+                        const el = document.getElementById(`sec-${categoryId}`);
+                        if (el) {
+                            window.scrollTo({
+                                top: el.offsetTop - 120,
+                                behavior: 'smooth'
+                            });
+                        }
+                    }, 100);
+                },
+
+                goToCheckout() {
+                    this.currentStep = 'checkout';
+                    this.initMap();
+                },
+
+                initMap() {
+                    if (this.map) {
+                        setTimeout(() => {
+                            this.map.invalidateSize();
+                        }, 200);
+                        return;
+                    }
+
+                    setTimeout(() => {
+                        // Coordenadas iniciales para Santa María del Pinar, Piura
+                        const defaultLat = -5.1764;
+                        const defaultLng = -80.6406;
+
+                        this.map = L.map('map').setView([defaultLat, defaultLng], 16);
+                        
+                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                            attribution: '© OpenStreetMap'
+                        }).addTo(this.map);
+
+                        const pinIcon = L.divIcon({
+                            html: `<i class="fa-solid fa-location-dot text-bb-red text-3xl drop-shadow-md"></i>`,
+                            iconSize: [30, 30],
+                            iconAnchor: [15, 30],
+                            className: 'bg-transparent border-none'
+                        });
+
+                        this.marker = L.marker([defaultLat, defaultLng], { 
+                            draggable: true,
+                            icon: pinIcon
+                        }).addTo(this.map);
+
+                        this.gpsCoords = `${defaultLat.toFixed(6)}, ${defaultLng.toFixed(6)}`;
+
+                        this.marker.on('dragend', () => {
+                            const pos = this.marker.getLatLng();
+                            this.gpsCoords = `${pos.lat.toFixed(6)}, ${pos.lng.toFixed(6)}`;
+                        });
+
+                        this.map.on('click', (e) => {
+                            const pos = e.latlng;
+                            this.marker.setLatLng(pos);
+                            this.gpsCoords = `${pos.lat.toFixed(6)}, ${pos.lng.toFixed(6)}`;
+                        });
+
+                    }, 250);
+                },
+
+                copyToClipboard(text) {
+                    const el = document.createElement('textarea');
+                    el.value = text;
+                    document.body.appendChild(el);
+                    el.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(el);
+                    this.triggerNotification("📞 ¡Número de Yape copiado!");
+                },
+
+                triggerNotification(msg) {
+                    this.floatingNotification = msg;
+                    setTimeout(() => {
+                        if (this.floatingNotification === msg) {
+                            this.floatingNotification = '';
+                        }
+                    }, 3500);
+                },
+
+                sendToWhatsApp() {
+                    this.errorMessage = '';
+
+                    if (!this.checkoutName.trim()) {
+                        this.errorMessage = "Debes ingresar tu Nombre completo.";
+                        return;
+                    }
+                    if (!this.checkoutPhone.trim() || this.checkoutPhone.length < 9) {
+                        this.errorMessage = "Debes ingresar un número de Celular válido (9 dígitos).";
+                        return;
+                    }
+                    if (this.checkoutDeliveryType === 'delivery') {
+                        if (!this.checkoutAddress.trim()) {
+                            this.errorMessage = "Por favor, ingresa tu dirección exacta.";
+                            return;
+                        }
+                    }
+
+                    // Guardar perfil si aplica
+                    if (this.saveUserData) {
+                        const profile = {
+                            name: this.checkoutName.trim(),
+                            phone: this.checkoutPhone.trim(),
+                            deliveryType: this.checkoutDeliveryType,
+                            address: this.checkoutAddress.trim(),
+                            reference: this.checkoutReference.trim()
+                        };
+                        localStorage.setItem('bigbite_saved_profile', JSON.stringify(profile));
+                    } else {
+                        localStorage.removeItem('bigbite_saved_profile');
+                    }
+
+                    const businessPhone = "51940279127"; // Teléfono Joaquín
+                    
+                    let msg = `🍔 *NUEVO PEDIDO - BIG BITE* 🍔\n\n`;
+                    msg += `👤 *Cliente:* ${this.checkoutName.trim()}\n`;
+                    msg += `📞 *Celular:* ${this.checkoutPhone.trim()}\n`;
+                    msg += `🛵 *Tipo de Entrega:* ${this.checkoutDeliveryType === 'delivery' ? 'Delivery' : 'Recojo en Local'}\n`;
+                    
+                    if (this.checkoutDeliveryType === 'delivery') {
+                        msg += `📍 *Dirección:* ${this.checkoutAddress.trim()}\n`;
+                        if (this.checkoutReference.trim()) {
+                            msg += `🏢 *Referencia:* ${this.checkoutReference.trim()}\n`;
+                        }
+                        msg += `🗺️ *Ubicación GPS:* https://www.google.com/maps/search/?api=1&query=${this.gpsCoords.replace(/\s/g, '')}\n`;
+                    } else {
+                        msg += `🏢 *Punto de Recojo:* Santa María del Pinar Mz D lote 25, Av. Las Gardenias\n`;
+                    }
+
+                    if (this.checkoutNotes.trim()) {
+                        msg += `📝 *Especificaciones:* ${this.checkoutNotes.trim()}\n`;
+                    }
+                    
+                    msg += `💵 *Método de Pago:* Yape (Joaquin Sanchez)\n\n`;
+                    msg += `📋 *PRODUCTOS PEDIDOS:* \n`;
+                    
+                    this.cart.forEach(item => {
+                        msg += `• ${item.quantity}x _${item.name}_ | S/ ${(item.price * item.quantity).toFixed(2)}\n`;
+                    });
+
+                    msg += `\n📦 *Subtotal:* S/ ${this.getCartTotal().toFixed(2)}\n`;
+                    if (this.checkoutDeliveryType === 'delivery') {
+                        msg += `🚚 *Costo de envío:* Cotización según la zona en WhatsApp\n`;
+                    }
+                    msg += `💰 *TOTAL GENERAL: S/ ${this.getCartTotal().toFixed(2)} + envío*\n\n`;
+                    msg += `⚡ _Por favor indícame si el Yape ya fue enviado para iniciar la preparación._`;
+
+                    const url = `https://api.whatsapp.com/send?phone=${businessPhone}&text=${encodeURIComponent(msg)}`;
+                    window.open(url, '_blank');
+                }
+            };
+        };
+    </script>
+
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-bb-cream text-bb-dark font-sans min-h-screen selection:bg-bb-yellow selection:text-bb-dark transition-all duration-150 relative pb-10" 
+      x-data="bigBiteApp()"
+      :class="isCartOpen || isDetailOpen ? 'overflow-hidden h-screen' : ''" 
+      x-init="initData()">
+
+    <header class="bg-white border-b border-bb-red/10 py-4 px-4 sticky top-0 z-40 shadow-sm">
+        <div class="max-w-6xl mx-auto flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div id="logo-container" class="w-12 h-12 md:w-14 md:h-14 rounded-full bg-white overflow-hidden shadow-md border-2 border-bb-yellow flex items-center justify-center p-0.5">
+                    <img :src="logoUrl" 
+                         alt="Logo Big Bite" 
+                         class="w-full h-full object-cover rounded-full"
+                         onerror="this.style.display='none'; document.getElementById('logo-fallback').style.display='flex'; document.getElementById('logo-container').classList.add('bg-bb-red'); document.getElementById('logo-container').classList.remove('bg-white');">
+                    <span id="logo-fallback" class="text-white font-brand text-2xl hidden">B</span>
+                </div>
+                <div>
+                    <h1 class="font-brand text-2xl md:text-3xl tracking-wide text-bb-red leading-none">BIG BITE</h1>
+                    <p class="text-[9px] md:text-xs font-extrabold tracking-widest text-bb-yellow uppercase mt-0.5">Burgers & Salchipapas</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <a href="https://www.instagram.com/big.bite.pe?utm_source=ig_web_button_share_sheet&igsh=ZDNlZDc0MzIxNw==" 
+                   target="_blank" 
+                   rel="noopener noreferrer"
+                   class="p-3 bg-pink-50 hover:bg-pink-100 text-pink-600 rounded-full transition-all flex items-center justify-center border border-pink-200"
+                   title="Síguenos en Instagram">
+                    <i class="fa-brands fa-instagram text-xl"></i>
+                </a>
+
+                <button @click="isCartOpen = true" 
+                        class="relative p-3 bg-bb-red/10 hover:bg-bb-red/20 text-bb-red rounded-full transition-all flex items-center justify-center">
+                    <i class="fa-solid fa-burger text-xl"></i>
+                    <span x-show="getCartItemsCount() > 0" 
+                          class="absolute -top-1 -right-1 bg-bb-yellow text-bb-dark font-extrabold text-[10px] h-5 w-5 rounded-full flex items-center justify-center animate-bounce shadow-md"
+                          x-text="getCartItemsCount()"></span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="bg-bb-red text-white py-2.5 px-4 text-xs">
+        <div class="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-white text-bb-red">
+                    <span class="w-1.5 h-1.5 rounded-full mr-1.5 bg-emerald-500 animate-pulse"></span>
+                    <span>Abierto en Piura</span>
+                </span>
+                <span class="font-semibold"><i class="fa-solid fa-clock mr-1"></i> Sábados y Domingos: 6:30 PM - 11:00 PM</span>
+            </div>
+            <div class="flex items-center gap-3 font-medium text-[11px]">
+                <span><i class="fa-solid fa-location-dot text-bb-yellow mr-1"></i> Santa María del Pinar, Piura</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-6xl mx-auto px-4 mt-6">
+        <div class="relative bg-gradient-to-br from-[#FAF6F0] to-[#EAE4D9] rounded-3xl p-6 md:p-10 border border-bb-red/10 overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6 shadow-xs">
+            <div class="space-y-4 text-center md:text-left z-10 max-w-xl">
+                <span class="bg-bb-red/10 text-bb-red text-[10px] font-extrabold uppercase tracking-widest px-3 py-1 rounded-full">
+                    🔥 El verdadero sabor artesanal
+                </span>
+                <h2 class="font-brand text-4xl md:text-5xl text-bb-dark leading-tight">
+                    ¿Hambre de algo <br class="hidden md:inline"> realmente BRUTAL?
+                </h2>
+                <p class="text-xs md:text-sm text-bb-shadow/80 leading-relaxed font-semibold">
+                    Hamburguesas de verdad con carne artesanal de 160 gramos, pan brioche tostado y las combinaciones más deliciosas de Piura.
+                </p>
+                <div class="pt-2">
+                    <button @click="scrollToMenu('hamburguesas')" class="px-6 py-3 bg-bb-red hover:bg-bb-red/90 text-white font-extrabold text-xs rounded-xl transition shadow-md">
+                        🔥 Ver Promociones de Hoy
+                    </button>
+                </div>
+            </div>
+            
+            <div class="w-44 h-44 md:w-56 md:h-56 rounded-full overflow-hidden shadow-xl border-4 border-bb-yellow rotate-3 hover:rotate-0 transition-all duration-300">
+                <img src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=500&q=80" 
+                     alt="Hamburguesas Big Bite" 
+                     class="w-full h-full object-cover">
+            </div>
+        </div>
+    </div>
+
+    <main class="max-w-6xl mx-auto px-4 py-8 md:py-12">
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
+            
+            <aside class="lg:col-span-1 sticky top-[84px] z-30 bg-bb-cream lg:bg-transparent -mx-4 px-4 py-2 lg:p-0 lg:m-0 border-b border-bb-red/10 lg:border-none">
+                <h3 class="hidden lg:block font-brand text-lg text-bb-red mb-4 px-1">Nuestra Carta</h3>
+                <div class="flex lg:flex-col gap-2 overflow-x-auto no-scrollbar lg:overflow-visible pb-2 lg:pb-0">
+                    <button @click="selectedCategory = 'todas'" 
+                            class="px-5 py-3 rounded-xl text-xs md:text-sm font-bold whitespace-nowrap tracking-wide transition-all duration-200 text-left w-auto lg:w-full flex items-center justify-between gap-3"
+                            :class="selectedCategory === 'todas' ? 'bg-bb-red text-white shadow-md' : 'bg-white hover:bg-bb-red/5 text-bb-dark border border-bb-red/10'">
+                        <span>🍔 Todo el Menú</span>
+                        <span class="hidden lg:inline text-[10px] bg-bb-dark/5 text-bb-dark px-2 py-0.5 rounded-full" x-text="products.length"></span>
+                    </button>
+                    
+                    <template x-for="cat in categories" :key="cat.id">
+                        <button @click="selectedCategory = cat.id" 
+                                class="px-5 py-3 rounded-xl text-xs md:text-sm font-bold whitespace-nowrap tracking-wide transition-all duration-200 text-left w-auto lg:w-full flex items-center justify-between gap-3"
+                                :class="selectedCategory === cat.id ? 'bg-bb-red text-white shadow-md' : 'bg-white hover:bg-bb-red/5 text-bb-dark border border-bb-red/10'">
+                            <span x-text="cat.name"></span>
+                            <span class="hidden lg:inline text-[10px] bg-bb-dark/5 text-bb-dark px-2 py-0.5 rounded-full" x-text="getProductsCountInCategory(cat.id)"></span>
+                        </button>
+                    </template>
+                </div>
+            </aside>
+
+            <div class="lg:col-span-3 space-y-10">
+                
+                <div x-show="isLoadingMenu" class="bg-bb-yellow/10 border border-bb-yellow/30 rounded-2xl p-4 flex items-center gap-3 text-xs text-bb-shadow font-semibold animate-pulse">
+                    <i class="fa-solid fa-arrows-rotate animate-spin text-bb-yellow text-sm"></i>
+                    <span>Sincronizando la carta brutal con Google Sheets en tiempo real...</span>
+                </div>
+
+                <template x-for="cat in categories" :key="cat.id">
+                    <div x-show="shouldShowCategory(cat.id)" class="space-y-4" :id="`sec-${cat.id}`">
+                        <h3 class="font-brand text-xl md:text-2xl text-bb-red border-b-2 border-bb-yellow pb-2 flex justify-between items-center">
+                            <span x-text="cat.name"></span>
+                        </h3>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <template x-for="product in getFilteredProducts(cat.id)" :key="product.id">
+                                <div @click="openProductDetail(product)"
+                                     class="bg-white rounded-2xl border border-bb-red/10 overflow-hidden shadow-xs hover:shadow-md transition-all duration-300 flex items-stretch min-h-[140px] cursor-pointer hover:border-bb-yellow/40">
+                                    
+                                    <div class="w-28 sm:w-36 flex-shrink-0 relative overflow-hidden bg-bb-cream">
+                                        <img :src="product.image || 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=500&q=80'" 
+                                             :alt="product.name" 
+                                             class="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                                             onerror="this.src='https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=500&q=80'">
+                                    </div>
+
+                                    <div class="p-4 flex flex-col justify-between flex-1 space-y-2">
+                                        <div>
+                                            <h4 class="font-bold text-sm md:text-base text-bb-dark" x-text="product.name"></h4>
+                                            <p class="text-[11px] md:text-xs text-bb-shadow/70 line-clamp-2 md:line-clamp-3 leading-relaxed mt-1" x-text="product.description"></p>
+                                        </div>
+
+                                        <div class="flex items-center justify-between pt-2 border-t border-bb-cream">
+                                            <span class="font-extrabold text-xs md:text-sm text-bb-red" x-text="`S/ ${product.price.toFixed(2)}`"></span>
+
+                                            <button @click.stop="addToCartDirectly(product)" 
+                                                    class="px-4 py-1.5 bg-bb-red hover:bg-bb-red/95 text-white text-xs font-bold rounded-xl transition shadow-xs hover:scale-102 flex items-center gap-1">
+                                                <i class="fa-solid fa-plus text-[9px]"></i>
+                                                <span>Agregar</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </main>
+
+    <div x-show="isDetailOpen" 
+         class="fixed inset-0 z-50 overflow-hidden flex items-center justify-center p-4 sm:p-6" 
+         style="display: none;"
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0">
+        
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-xs transition-opacity" @click="isDetailOpen = false"></div>
+
+        <div class="bg-white rounded-3xl overflow-hidden max-w-lg w-full shadow-2xl border border-bb-red/15 relative z-10 flex flex-col max-h-[85vh] sm:max-h-[90vh] transform transition-all"
+             x-show="isDetailOpen"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 translate-y-4 scale-95"
+             x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100 translate-y-0 scale-100"
+             x-transition:leave-end="opacity-0 translate-y-4 scale-95">
+            
+            <button @click="isDetailOpen = false" 
+                    class="absolute top-4 right-4 z-20 bg-black/60 hover:bg-bb-red text-white w-9 h-9 rounded-full flex items-center justify-center transition shadow-md">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+
+            <div class="h-60 sm:h-80 w-full relative overflow-hidden bg-bb-cream">
+                <img :src="selectedProductForDetail?.image || 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=500&q=80'" 
+                     :alt="selectedProductForDetail?.name" 
+                     class="w-full h-full object-cover"
+                     onerror="this.src='https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=500&q=80'">
+                
+                <div class="absolute bottom-4 left-4">
+                    <span class="bg-bb-red text-white text-[10px] font-extrabold uppercase tracking-widest px-3.5 py-1.5 rounded-full shadow-md border-2 border-bb-yellow"
+                          x-text="selectedProductForDetail ? categories.find(c => c.id === selectedProductForDetail.category)?.name : ''">
+                    </span>
+                </div>
+            </div>
+
+            <div class="p-6 space-y-4 flex-1 overflow-y-auto">
+                <h3 class="font-brand text-2xl text-bb-dark tracking-wide" x-text="selectedProductForDetail?.name"></h3>
+                <p class="text-xs sm:text-sm text-bb-shadow/80 font-semibold leading-relaxed" x-text="selectedProductForDetail?.description"></p>
+                
+                <div class="flex items-center justify-between pt-4 border-t border-bb-cream">
+                    <div>
+                        <span class="text-[10px] text-gray-400 font-extrabold uppercase tracking-wider block">Precio</span>
+                        <span class="font-black text-xl text-bb-red" x-text="`S/ ${selectedProductForDetail?.price.toFixed(2)}`"></span>
+                    </div>
+
+                    <button @click="addToCartDirectly(selectedProductForDetail); isDetailOpen = false" 
+                            class="px-6 py-3 bg-bb-red hover:bg-bb-red/90 text-white text-xs font-extrabold rounded-xl transition shadow-md flex items-center gap-2 transform active:scale-95">
+                        <i class="fa-solid fa-plus text-[10px]"></i>
+                        <span>Agregar al Pedido</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="isCartOpen" class="fixed inset-0 z-50 overflow-hidden" style="display: none;">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-xs transition-opacity" @click="isCartOpen = false"></div>
+
+        <div class="absolute inset-y-0 right-0 max-w-full flex">
+            <div class="w-screen max-w-lg bg-white flex flex-col h-full shadow-2xl border-l border-bb-red/10"
+                 x-transition:enter="transform transition ease-out duration-300"
+                 x-transition:enter-start="translate-x-full"
+                 x-transition:enter-end="translate-x-0"
+                 x-transition:leave="transform transition ease-in duration-200"
+                 x-transition:leave-start="translate-x-0"
+                 x-transition:leave-end="translate-x-full">
+                
+                <div class="p-4 sm:p-5 bg-bb-red text-white flex items-center justify-between flex-shrink-0">
+                    <div class="flex items-center gap-2">
+                        <button x-show="currentStep === 'checkout'" @click="currentStep = 'cart'" class="text-white hover:text-bb-yellow mr-1 text-xs flex items-center gap-1 bg-white/10 px-2.5 py-1.5 rounded-lg transition font-extrabold">
+                            <i class="fa-solid fa-chevron-left text-[10px]"></i> Volver
+                        </button>
+                        <div class="flex items-center gap-1.5" x-show="currentStep === 'cart'">
+                            <i class="fa-solid fa-burger text-bb-yellow text-lg sm:text-xl"></i>
+                            <h2 class="font-brand text-base sm:text-lg tracking-wide">Tu Pedido Big Bite</h2>
+                        </div>
+                        <div class="flex items-center gap-1.5" x-show="currentStep === 'checkout'">
+                            <h2 class="font-brand text-base sm:text-lg tracking-wide">Finalizar Pedido</h2>
+                        </div>
+                    </div>
+                    <button @click="isCartOpen = false" class="text-white hover:text-bb-yellow text-lg sm:text-xl p-1">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <div x-show="errorMessage" class="bg-rose-50 text-rose-800 text-xs px-5 py-3 border-b border-rose-200 flex items-center justify-between flex-shrink-0">
+                    <span x-text="errorMessage" class="font-semibold"></span>
+                    <button @click="errorMessage = ''" class="text-rose-500 font-bold px-2">X</button>
+                </div>
+
+                <div class="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 sm:space-y-6">
+                    
+                    <div x-show="currentStep === 'cart'" class="space-y-4">
+                        <div x-show="cart.length === 0" class="text-center py-12 space-y-3">
+                            <i class="fa-solid fa-cookie-bite text-5xl text-bb-yellow/40 animate-pulse"></i>
+                            <p class="text-xs font-bold text-bb-shadow/80">¿Aún no has agregado ninguna hamburguesa brutal?</p>
+                        </div>
+
+                        <div x-show="cart.length > 0" class="divide-y divide-bb-cream">
+                            <template x-for="item in cart" :key="item.id">
+                                <div class="py-4 flex items-center justify-between gap-4">
+                                    <div class="flex-1">
+                                        <h4 class="font-bold text-xs md:text-sm text-bb-dark" x-text="item.name"></h4>
+                                        <p class="text-[11px] font-extrabold text-bb-shadow/70 mt-0.5" x-text="`S/ ${item.price.toFixed(2)} c/u`"></p>
+                                    </div>
+
+                                    <div class="flex items-center gap-2 border border-bb-red/20 rounded-xl px-2 py-1 bg-bb-cream">
+                                        <button @click="decreaseQty(item)" class="text-bb-red hover:text-bb-dark px-1.5 py-0.5 text-xs font-bold"><i class="fa-solid fa-minus"></i></button>
+                                        <span class="text-xs font-bold text-bb-dark px-1" x-text="item.quantity"></span>
+                                        <button @click="increaseQty(item)" class="text-bb-red hover:text-bb-dark px-1.5 py-0.5 text-xs font-bold"><i class="fa-solid fa-plus"></i></button>
+                                    </div>
+
+                                    <div class="text-right min-w-[70px]">
+                                        <span class="font-extrabold text-xs md:text-sm text-bb-dark" x-text="`S/ ${(item.price * item.quantity).toFixed(2)}`"></span>
+                                        <button @click="removeItem(item)" class="block text-rose-400 hover:text-rose-600 text-xs mt-1 ml-auto p-1">
+                                            <i class="fa-solid fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <div x-show="currentStep === 'checkout'" class="space-y-4 sm:space-y-5">
+                        
+                        <div class="bg-bb-red/5 p-3 sm:p-4 rounded-xl border border-bb-red/10 flex items-center justify-between gap-3">
+                            <div class="flex-1">
+                                <h4 class="text-[10px] sm:text-xs font-black text-bb-red uppercase tracking-wider">💾 Guardar mis datos</h4>
+                                <p class="text-[9px] sm:text-[10px] text-bb-shadow/80 font-bold mt-0.5">Rellena el formulario automáticamente en tus próximas compras.</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" x-model="saveUserData" class="sr-only peer">
+                                <div class="w-9 h-5 bg-gray-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-bb-red"></div>
+                            </label>
+                        </div>
+
+                        <div class="space-y-3">
+                            <h3 class="font-brand text-xs sm:text-sm text-bb-red border-b border-bb-yellow pb-1 uppercase tracking-wider">Datos Personales</h3>
+                            <div>
+                                <label class="block text-[11px] font-extrabold text-bb-dark mb-1">Nombre completo *</label>
+                                <input type="text" x-model="checkoutName" placeholder="Tu nombre y apellido" class="w-full text-xs py-2.5 px-3 rounded-xl border border-bb-red/20 focus:border-bb-red focus:ring-1 focus:ring-bb-red outline-none bg-bb-cream font-semibold text-bb-dark">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-extrabold text-bb-dark mb-1">Celular (9 dígitos, ej: 9XXXXXXXX) *</label>
+                                <input type="tel" x-model="checkoutPhone" maxlength="9" placeholder="912345678" class="w-full text-xs py-2.5 px-3 rounded-xl border border-bb-red/20 focus:border-bb-red focus:ring-1 focus:ring-bb-red outline-none bg-bb-cream font-semibold text-bb-dark">
+                            </div>
+                        </div>
+
+                        <div class="space-y-3">
+                            <h3 class="font-brand text-xs sm:text-sm text-bb-red border-b border-bb-yellow pb-1 uppercase tracking-wider">Detalles del Envío</h3>
+                            <div>
+                                <label class="block text-[11px] font-extrabold text-bb-dark mb-1">Forma de Entrega *</label>
+                                <div class="grid grid-cols-2 gap-2 mb-2">
+                                    <button @click="checkoutDeliveryType = 'delivery'" 
+                                            :class="checkoutDeliveryType === 'delivery' ? 'bg-bb-red text-white font-bold' : 'bg-bb-cream text-bb-shadow'"
+                                            class="py-2 rounded-xl text-xs text-center transition font-semibold border border-bb-red/10">
+                                        🚗 Delivery
+                                    </button>
+                                    <button @click="checkoutDeliveryType = 'local'" 
+                                            :class="checkoutDeliveryType === 'local' ? 'bg-bb-red text-white font-bold' : 'bg-bb-cream text-bb-shadow'"
+                                            class="py-2 rounded-xl text-xs text-center transition font-semibold border border-bb-red/10">
+                                        🏪 Recoger en Local
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div x-show="checkoutDeliveryType === 'delivery'" class="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-3 sm:p-4 text-xs font-semibold leading-relaxed space-y-1">
+                                <p class="flex items-center gap-1.5 text-amber-800 font-extrabold uppercase tracking-wider text-[10px]">
+                                    <i class="fa-solid fa-circle-info"></i> Cotización de Envío por WhatsApp
+                                </p>
+                                <p class="text-amber-950/80">El costo de delivery no está incluido en este total. Se cotizará directamente con el motorizado en tu chat de WhatsApp basándonos en tu ubicación seleccionada.</p>
+                            </div>
+
+                            <div x-show="checkoutDeliveryType === 'delivery'">
+                                <label class="block text-[11px] font-extrabold text-bb-dark mb-1">Dirección exacta *</label>
+                                <input type="text" x-model="checkoutAddress" placeholder="Calle, Manzana, Lote o Número de Casa" class="w-full text-xs py-2.5 px-3 rounded-xl border border-bb-red/20 focus:border-bb-red outline-none bg-bb-cream font-semibold text-bb-dark">
+                            </div>
+
+                            <div x-show="checkoutDeliveryType === 'delivery'">
+                                <label class="block text-[11px] font-extrabold text-bb-dark mb-1">Referencia (ej: frente al parque) <span class="text-gray-400 font-normal">(Opcional)</span></label>
+                                <input type="text" x-model="checkoutReference" placeholder="Frente al parque, al costado de tienda, etc." class="w-full text-xs py-2.5 px-3 rounded-xl border border-bb-red/20 focus:border-bb-red outline-none bg-bb-cream font-semibold text-bb-dark">
+                            </div>
+
+                            <div x-show="checkoutDeliveryType === 'delivery'" class="space-y-1">
+                                <div class="flex items-center justify-between">
+                                    <label class="block text-[11px] font-extrabold text-bb-dark">Ubicación GPS (Haz Clic o Arrastra el Pin manualmente) *</label>
+                                </div>
+                                <div id="map" class="h-40 sm:h-56 rounded-2xl border-2 border-bb-red/20 overflow-hidden shadow-inner mt-1"></div>
+                                <div class="flex items-center justify-between text-[9px] sm:text-[10px] text-bb-shadow/80 font-bold bg-bb-red/5 p-2 rounded-lg mt-1">
+                                    <span>📍 Coordenadas marcadas:</span>
+                                    <span class="text-bb-red font-mono" x-text="gpsCoords || 'Mueve el marcador en el mapa...'"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-[11px] font-extrabold text-bb-dark mb-1">Notas especiales para la cocina (Opcional)</label>
+                            <input type="text" x-model="checkoutNotes" placeholder="Ej: Sin cebolla, cremas aparte, etc." class="w-full text-xs py-2.5 px-3 rounded-xl border border-bb-red/20 focus:border-bb-red outline-none bg-bb-cream font-semibold text-bb-dark">
+                        </div>
+
+                        <div class="space-y-3 bg-bb-cream p-3 sm:p-4 rounded-2xl border border-bb-red/10">
+                            <h4 class="text-xs font-brand text-bb-red uppercase tracking-wider">Pasarela de Pago</h4>
+                            <div class="bg-white p-3.5 rounded-xl border border-bb-red/10 flex items-center justify-between shadow-sm">
+                                <div class="flex items-center gap-2.5">
+                                    <div class="bg-[#742d8c] text-white font-extrabold text-[9px] px-1.5 py-0.5 rounded-md">YAPE</div>
+                                    <div class="text-[11px] text-bb-dark">
+                                        <p class="font-extrabold text-xs">914 440 507</p>
+                                        <p class="text-[9px] sm:text-[10px] text-bb-shadow/80 font-bold">Joaquin Andre Sanchez More</p>
+                                    </div>
+                                </div>
+                                <button @click="copyToClipboard('914440507')" class="px-3 py-1.5 bg-bb-red/10 text-bb-red font-extrabold text-[10px] rounded-lg hover:bg-bb-red hover:text-white transition">Copiar</button>
+                            </div>
+                            <p class="text-[10px] text-bb-shadow/80 font-bold text-center leading-normal">
+                                Copia el número arriba, ingresa a Yape para pagar el total del pedido y envía la captura de pantalla del comprobante en el chat de WhatsApp.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div x-show="cart.length > 0" class="p-3.5 sm:p-5 border-t border-bb-cream bg-white space-y-2 sm:space-y-4 flex-shrink-0 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
+                    
+                    <div class="space-y-1 sm:space-y-1.5 text-xs font-bold text-bb-shadow/90" :class="currentStep === 'checkout' ? 'hidden sm:block' : ''">
+                        <div class="flex justify-between">
+                            <span>Subtotal:</span>
+                            <span x-text="`S/ ${getCartTotal().toFixed(2)}`"></span>
+                        </div>
+                        <div class="flex justify-between text-amber-700" x-show="checkoutDeliveryType === 'delivery'">
+                            <span>Delivery:</span>
+                            <span>Por coordinar</span>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div x-show="currentStep === 'cart'" class="space-y-3">
+                            <div class="flex justify-between text-sm sm:text-base font-black text-bb-red pt-1 border-t border-bb-cream/60">
+                                <span>Total a pagar:</span>
+                                <span x-text="`S/ ${getCartTotal().toFixed(2)}`"></span>
+                            </div>
+                            <button @click="goToCheckout()" 
+                                    class="w-full py-3 sm:py-4 bg-bb-red hover:bg-bb-red/90 text-white font-extrabold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 text-xs sm:text-sm uppercase tracking-wide">
+                                Proceder al pago <i class="fa-solid fa-arrow-right text-[10px] sm:text-xs"></i>
+                            </button>
+                        </div>
+
+                        <div x-show="currentStep === 'checkout'" class="flex sm:flex-col justify-between items-center gap-3 pt-1 border-t border-bb-cream/60 sm:border-t-0">
+                            <div class="flex flex-col text-left mr-auto sm:w-full sm:pb-2 sm:border-b sm:border-bb-cream/60">
+                                <span class="text-[8px] sm:text-[9px] text-gray-500 font-extrabold uppercase tracking-wider leading-none">Total a Pagar</span>
+                                <span class="text-base sm:text-lg font-black text-bb-red leading-tight" x-text="`S/ ${getCartTotal().toFixed(2)}`"></span>
+                                <span class="text-[8px] text-amber-600 font-bold block" x-show="checkoutDeliveryType === 'delivery'" x-text="`+ costo de envío`"></span>
+                            </div>
+
+                            <button @click="sendToWhatsApp()" 
+                                    class="flex-1 sm:w-full py-2.5 sm:py-3.5 px-3 sm:px-4 bg-[#25D366] hover:bg-[#128C7E] text-white font-extrabold rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 text-xs sm:text-sm uppercase tracking-wide">
+                                <i class="fa-brands fa-whatsapp text-base sm:text-lg"></i>
+                                <span class="inline sm:hidden">Confirmar</span>
+                                <span class="hidden sm:inline">Confirmar Pedido por WhatsApp</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <div x-show="floatingNotification" 
+         class="fixed bottom-4 left-4 right-4 md:left-auto md:w-80 bg-bb-dark text-white p-4 rounded-xl shadow-2xl z-50 flex items-center justify-between border border-bb-yellow/20"
+         style="display: none;"
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 translate-y-4"
+         x-transition:enter-end="opacity-100 translate-y-0"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100 translate-y-0"
+         x-transition:leave-end="opacity-0 translate-y-4">
+        <span class="text-xs font-bold" x-text="floatingNotification"></span>
+        <button @click="floatingNotification = ''" class="text-bb-yellow font-black text-xs px-2">OK</button>
+    </div>
+
+    <button @click="isCartOpen = true" 
+            x-show="!isCartOpen" 
+            class="fixed bottom-6 right-6 z-40 bg-bb-red hover:bg-bb-red/90 text-white font-extrabold py-3.5 px-5 rounded-full shadow-2xl transition-all duration-300 transform hover:scale-105 flex items-center gap-2.5 border-2 border-bb-yellow"
+            style="display: none;"
+            x-transition:enter="transition ease-out duration-300"
+            x-transition:enter-start="opacity-0 translate-y-10 scale-95"
+            x-transition:enter-end="opacity-100 translate-y-0 scale-100">
+        
+        <span class="relative">
+            <i class="fa-solid fa-burger text-lg sm:text-xl text-bb-yellow"></i>
+            <span x-show="getCartItemsCount() > 0" 
+                  class="absolute -top-2.5 -right-2.5 bg-bb-yellow text-bb-dark font-black text-[9px] h-5 w-5 rounded-full flex items-center justify-center border border-bb-red animate-pulse"
+                  x-text="getCartItemsCount()"></span>
+        </span>
+        <span class="text-xs sm:text-sm tracking-wide uppercase">Abrir Pedido</span>
+    </button>
+
+</body>
+</html>
