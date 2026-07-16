@@ -5,18 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BIG BITE — Burgers & Salchipapas</title>
     
-    <!-- Tailwind CSS para el diseño premium -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Google Fonts: Plus Jakarta Sans & Righteous -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Righteous&display=swap" rel="stylesheet">
     
-    <!-- FontAwesome para iconos de interfaz de usuario -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- Leaflet.js para el Mapa GPS Interactivo -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
@@ -90,6 +86,12 @@
                 checkoutNotes: '',
                 gpsCoords: '',
                 
+                // Sistema de Cotización por Distancia GPS
+                deliveryDistance: 0,
+                deliveryCost: 0,
+                isOutOfRange: false,
+                restaurantCoords: { lat: -5.16908597946167, lng: -80.6329345703125 }, // Santa María del Pinar
+
                 // Sistema de guardado de datos (LocalStorage)
                 saveUserData: false,
                 
@@ -176,10 +178,9 @@
                     }, 30000);
                 },
 
-                // CALCULAR EL ESTADO ABIERTO/CERRADO EN TIEMPO REAL (ZONA HORARIA PERÚ - PIURA)
+                // CALCULAR EL ESTADO ABIERTO/CERRADO EN TIEMPO REAL (PIURA, PERÚ - GMT-5)
                 updateOpenStatus() {
                     const now = new Date();
-                    // Forzar fecha y hora de la zona horaria de Piura, Perú (GMT-5)
                     const peruString = now.toLocaleString("en-US", { timeZone: "America/Lima" });
                     const peruDate = new Date(peruString);
                     
@@ -188,9 +189,8 @@
                     const minutes = peruDate.getMinutes();
                     const currentTimeInMinutes = hours * 60 + minutes;
 
-                    // Rangos de atención: 6:30 PM (18:30) a 11:00 PM (23:00)
-                    const openingTime = 18 * 60 + 30; // 1110 minutos
-                    const closingTime = 23 * 60;      // 1380 minutos
+                    const openingTime = 18 * 60 + 30; // 6:30 PM
+                    const closingTime = 23 * 60;      // 11:00 PM
 
                     const isTimeValid = currentTimeInMinutes >= openingTime && currentTimeInMinutes < closingTime;
 
@@ -202,6 +202,139 @@
                         // Solo Sábado (6) y Domingo (0)
                         const isDayValid = [0, 6].includes(day);
                         this.isOpen = isDayValid && isTimeValid;
+                    }
+                },
+
+                // CÁLCULO DE DISTANCIA MATEMÁTICA (FÓRMULA DE HAVERSINE)
+                calculateDistance(lat1, lon1, lat2, lon2) {
+                    const R = 6371; // Radio de la Tierra en km
+                    const dLat = (lat2 - lat1) * Math.PI / 180;
+                    const dLon = (lon2 - lon1) * Math.PI / 180;
+                    const a = 
+                        Math.sin(dLat/2) * Math.sin(dLat/2) +
+                        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+                    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                    return R * c;
+                },
+
+                // ACTUALIZAR DISTANCIA Y COTIZACIÓN DE DELIVERY
+                onMarkerMove(lat, lng) {
+                    this.gpsCoords = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                    
+                    const dist = this.calculateDistance(
+                        this.restaurantCoords.lat, 
+                        this.restaurantCoords.lng, 
+                        lat, 
+                        lng
+                    );
+                    
+                    this.deliveryDistance = dist;
+
+                    // Escala de precios por rangos de distancia solicitados:
+                    if (dist < 1.0) {
+                        this.deliveryCost = 3.0; // Menor a 1km = S/ 3
+                        this.isOutOfRange = false;
+                    } else if (dist >= 1.0 && dist <= 3.0) {
+                        this.deliveryCost = 6.0; // 1-3km = S/ 6
+                        this.isOutOfRange = false;
+                    } else if (dist > 3.0 && dist <= 6.0) {
+                        this.deliveryCost = 9.0; // 3-6km = S/ 9
+                        this.isOutOfRange = false;
+                    } else if (dist > 6.0 && dist <= 9.0) {
+                        this.deliveryCost = 13.0; // 6-9km = S/ 13
+                        this.isOutOfRange = false;
+                    } else {
+                        this.deliveryCost = 0;
+                        this.isOutOfRange = true; // Más de 9km = Fuera de cobertura (Bloqueado)
+                    }
+                },
+
+                // OBTENER UBICACIÓN POR GPS NATIVO Y AUTOCOMPLETAR DIRECCIÓN escrita (OpenStreetMap Gratis)
+                getCurrentLocationGPS() {
+                    if (!navigator.geolocation) {
+                        this.triggerNotification("❌ Tu navegador no soporta geolocalización.");
+                        return;
+                    }
+                    this.triggerNotification("⏳ Conectando con el GPS de tu celular...");
+                    navigator.geolocation.getCurrentPosition(
+                        async (position) => {
+                            const lat = position.coords.latitude;
+                            const lng = position.coords.longitude;
+                            
+                            if (this.map) {
+                                this.map.setView([lat, lng], 16);
+                            }
+                            if (this.marker) {
+                                this.marker.setLatLng([lat, lng]);
+                            }
+                            this.onMarkerMove(lat, lng);
+                            this.triggerNotification("✅ GPS fijado correctamente.");
+
+                            // Geocodificación inversa para autocompletar la dirección del cliente
+                            try {
+                                const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`, {
+                                    headers: { 'Accept-Language': 'es' }
+                                });
+                                if (response.ok) {
+                                    const data = await response.json();
+                                    if (data && data.address) {
+                                        const addr = data.address;
+                                        const addressParts = [];
+                                        if (addr.road) addressParts.push(addr.road);
+                                        if (addr.suburb) addressParts.push(addr.suburb);
+                                        if (addr.neighbourhood && !addr.suburb) addressParts.push(addr.neighbourhood);
+                                        if (addr.city_district) addressParts.push(addr.city_district);
+                                        
+                                        this.checkoutAddress = addressParts.length > 0 
+                                            ? addressParts.join(', ') 
+                                            : data.display_name.split(',').slice(0, 3).join(',').trim();
+                                    }
+                                }
+                            } catch (e) {
+                                console.error("Error Nominatim:", e);
+                            }
+                        },
+                        (error) => {
+                            console.error(error);
+                            this.triggerNotification("❌ No pudimos acceder a tu GPS. Activa tus permisos de ubicación.");
+                        },
+                        { enableHighAccuracy: true, timeout: 10000 }
+                    );
+                },
+
+                // BUSCAR DIRECCIÓN ESCRITA MANUALMENTE Y MOVER EL MAPA
+                async geocodeAddress() {
+                    if (!this.checkoutAddress.trim()) {
+                        this.triggerNotification("⚠️ Escribe una dirección para buscarla.");
+                        return;
+                    }
+                    this.triggerNotification("⏳ Buscando dirección en el mapa...");
+                    try {
+                        const query = encodeURIComponent(`${this.checkoutAddress.trim()}, Piura, Peru`);
+                        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`, {
+                            headers: { 'Accept-Language': 'es' }
+                        });
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data && data.length > 0) {
+                                const lat = parseFloat(data[0].lat);
+                                const lng = parseFloat(data[0].lon);
+                                
+                                if (this.map) {
+                                    this.map.setView([lat, lng], 16);
+                                }
+                                if (this.marker) {
+                                    this.marker.setLatLng([lat, lng]);
+                                }
+                                this.onMarkerMove(lat, lng);
+                                this.triggerNotification("🎯 Mapa fijado en tu dirección.");
+                            } else {
+                                this.triggerNotification("❌ No se encontró la dirección. Intenta arrastrar el pin manualmente.");
+                            }
+                        }
+                    } catch (e) {
+                        console.error(e);
+                        this.triggerNotification("❌ Error al conectar con el servidor de mapas.");
                     }
                 },
 
@@ -220,7 +353,6 @@
                         const lines = text.split(/\r?\n/);
                         if (lines.length < 2) return;
                         
-                        // Parsear cabeceras en minúsculas y limpias
                         const headers = lines[0].split('\t').map(h => h.trim().toLowerCase().replace(/["\r\n]/g, ''));
                         
                         const fetchedProducts = [];
@@ -235,12 +367,12 @@
                             headers.forEach((header, index) => {
                                 let val = cols[index] || '';
                                 if (val.startsWith('"') && val.endsWith('"')) {
-                                    val = val.slice(1, -1); // Limpiar comillas de texto de Google Sheets
+                                    val = val.slice(1, -1);
                                 }
                                 item[header] = val;
                             });
                             
-                            // Lógica de Sincronización del Horario Activo
+                            // Sincronización de Horario Activo desde Sheet
                             if (item.id === 'horario' || (item.categoria === 'config' && item.nombre === 'Horario Activo')) {
                                 if (item.estado) {
                                     const val = item.estado.toUpperCase().trim();
@@ -251,7 +383,7 @@
                                 continue;
                             }
                             
-                            // Detectar si la fila representa al Logo de la marca
+                            // Logo dinámico
                             if (item.id === 'logo' || item.categoria === 'logo' || item.nombre?.toLowerCase().includes('logo')) {
                                 if (item.imagen_url) {
                                     fetchedLogo = item.imagen_url;
@@ -259,7 +391,6 @@
                                 continue;
                             }
                             
-                            // Validar que el producto tenga datos requeridos y esté marcado como Disponible
                             if (item.nombre && item.categoria && item.estado?.toLowerCase() === 'disponible') {
                                 fetchedProducts.push({
                                     id: item.id || `prod-${i}`,
@@ -276,9 +407,9 @@
                             this.products = fetchedProducts;
                         }
                         this.logoUrl = fetchedLogo;
-                        this.updateOpenStatus(); // Recalcular estado abierto/cerrado con los nuevos datos
+                        this.updateOpenStatus();
                     } catch (error) {
-                        console.error("Error cargando Google Sheets en tiempo real:", error);
+                        console.error("Error cargando Google Sheets:", error);
                     } finally {
                         this.isLoadingMenu = false;
                     }
@@ -344,6 +475,12 @@
                     return this.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
                 },
 
+                getCartTotalWithDelivery() {
+                    const subtotal = this.getCartTotal();
+                    const delivery = (this.checkoutDeliveryType === 'delivery' && !this.isOutOfRange) ? this.deliveryCost : 0;
+                    return subtotal + delivery;
+                },
+
                 scrollToMenu(categoryId) {
                     this.selectedCategory = categoryId;
                     setTimeout(() => {
@@ -371,11 +508,11 @@
                     }
 
                     setTimeout(() => {
-                        // Coordenadas iniciales para Santa María del Pinar, Piura
+                        // Coordenadas iniciales por defecto (Santa María del Pinar, Piura)
                         const defaultLat = -5.1764;
                         const defaultLng = -80.6406;
 
-                        this.map = L.map('map').setView([defaultLat, defaultLng], 16);
+                        this.map = L.map('map').setView([defaultLat, defaultLng], 15);
                         
                         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                             attribution: '© OpenStreetMap'
@@ -393,17 +530,17 @@
                             icon: pinIcon
                         }).addTo(this.map);
 
-                        this.gpsCoords = `${defaultLat.toFixed(6)}, ${defaultLng.toFixed(6)}`;
+                        this.onMarkerMove(defaultLat, defaultLng);
 
                         this.marker.on('dragend', () => {
                             const pos = this.marker.getLatLng();
-                            this.gpsCoords = `${pos.lat.toFixed(6)}, ${pos.lng.toFixed(6)}`;
+                            this.onMarkerMove(pos.lat, pos.lng);
                         });
 
                         this.map.on('click', (e) => {
                             const pos = e.latlng;
                             this.marker.setLatLng(pos);
-                            this.gpsCoords = `${pos.lat.toFixed(6)}, ${pos.lng.toFixed(6)}`;
+                            this.onMarkerMove(pos.lat, pos.lng);
                         });
 
                     }, 250);
@@ -444,6 +581,10 @@
                             this.errorMessage = "Por favor, ingresa tu dirección exacta.";
                             return;
                         }
+                        if (this.isOutOfRange) {
+                            this.errorMessage = "La ubicación elegida está fuera del rango de reparto (Límite: 9 km).";
+                            return;
+                        }
                     }
 
                     // Guardar perfil si aplica
@@ -473,6 +614,7 @@
                             msg += `🏢 *Referencia:* ${this.checkoutReference.trim()}\n`;
                         }
                         msg += `🗺️ *Ubicación GPS:* https://www.google.com/maps/search/?api=1&query=${this.gpsCoords.replace(/\s/g, '')}\n`;
+                        msg += `📏 *Distancia:* ${this.deliveryDistance.toFixed(2)} km\n`;
                     } else {
                         msg += `🏢 *Punto de Recojo:* Santa María del Pinar Mz D lote 25, Av. Las Gardenias\n`;
                     }
@@ -488,11 +630,15 @@
                         msg += `• ${item.quantity}x _${item.name}_ | S/ ${(item.price * item.quantity).toFixed(2)}\n`;
                     });
 
-                    msg += `\n📦 *Subtotal:* S/ ${this.getCartTotal().toFixed(2)}\n`;
+                    const subtotal = this.getCartTotal();
+                    const delivery = this.checkoutDeliveryType === 'delivery' ? this.deliveryCost : 0;
+                    const total = subtotal + delivery;
+
+                    msg += `\n📦 *Subtotal:* S/ ${subtotal.toFixed(2)}\n`;
                     if (this.checkoutDeliveryType === 'delivery') {
-                        msg += `🚚 *Costo de envío:* Cotización según la zona en WhatsApp\n`;
+                        msg += `🚚 *Envío:* S/ ${delivery.toFixed(2)}\n`;
                     }
-                    msg += `💰 *TOTAL GENERAL: S/ ${this.getCartTotal().toFixed(2)} + envío*\n\n`;
+                    msg += `💰 *TOTAL GENERAL: S/ ${total.toFixed(2)}*\n\n`;
                     msg += `⚡ _Por favor indícame si el Yape ya fue enviado para iniciar la preparación._`;
 
                     const url = `https://api.whatsapp.com/send?phone=${businessPhone}&text=${encodeURIComponent(msg)}`;
@@ -502,7 +648,6 @@
         };
     </script>
 
-    <!-- Alpine.js cargado de forma deferida después de registrar la lógica -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
 <body class="bg-bb-cream text-bb-dark font-sans min-h-screen selection:bg-bb-yellow selection:text-bb-dark transition-all duration-150 relative pb-10" 
@@ -510,11 +655,9 @@
       :class="isCartOpen || isDetailOpen ? 'overflow-hidden h-screen' : ''" 
       x-init="initData()">
 
-    <!-- HEADER PRINCIPAL -->
     <header class="bg-white border-b border-bb-red/10 py-4 px-4 sticky top-0 z-40 shadow-sm">
         <div class="max-w-6xl mx-auto flex items-center justify-between">
             <div class="flex items-center gap-3">
-                <!-- LOGO DINÁMICO DESDE GOOGLE SHEETS CON FALLBACK AUTOMÁTICO -->
                 <div id="logo-container" class="w-12 h-12 md:w-14 md:h-14 rounded-full bg-white overflow-hidden shadow-md border-2 border-bb-yellow flex items-center justify-center p-0.5">
                     <img :src="logoUrl" 
                          alt="Logo Big Bite" 
@@ -529,7 +672,6 @@
             </div>
 
             <div class="flex items-center gap-2">
-                <!-- Botón de Instagram oficial de Big Bite -->
                 <a href="https://www.instagram.com/big.bite.pe?utm_source=ig_web_button_share_sheet&igsh=ZDNlZDc0MzIxNw==" 
                    target="_blank" 
                    rel="noopener noreferrer"
@@ -538,7 +680,6 @@
                     <i class="fa-brands fa-instagram text-xl"></i>
                 </a>
 
-                <!-- Carrito de Compras -->
                 <button @click="isCartOpen = true" 
                         class="relative p-3 bg-bb-red/10 hover:bg-bb-red/20 text-bb-red rounded-full transition-all flex items-center justify-center">
                     <i class="fa-solid fa-burger text-xl"></i>
@@ -550,7 +691,6 @@
         </div>
     </header>
 
-    <!-- BARRA DE MENSAJE Y TIEMPO REAL (DINÁMICA ABIERTO/CERRADO) -->
     <div class="bg-bb-red text-white py-2.5 px-4 text-xs">
         <div class="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2">
             <div class="flex items-center gap-2">
@@ -569,7 +709,6 @@
         </div>
     </div>
 
-    <!-- HERO BANNER DE BIENVENIDA -->
     <div class="max-w-6xl mx-auto px-4 mt-6">
         <div class="relative bg-gradient-to-br from-[#FAF6F0] to-[#EAE4D9] rounded-3xl p-6 md:p-10 border border-bb-red/10 overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6 shadow-xs">
             <div class="space-y-4 text-center md:text-left z-10 max-w-xl">
@@ -597,7 +736,6 @@
         </div>
     </div>
 
-    <!-- CONTENIDO PRINCIPAL: CATEGORÍAS Y PRODUCTOS -->
     <main class="max-w-6xl mx-auto px-4 py-8 md:py-12">
         <div class="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
             
@@ -622,10 +760,8 @@
                 </div>
             </aside>
 
-            <!-- GRILLA DE PRODUCTOS -->
             <div class="lg:col-span-3 space-y-10">
                 
-                <!-- Indicador visual mientras sincroniza -->
                 <div x-show="isLoadingMenu" class="bg-bb-yellow/10 border border-bb-yellow/30 rounded-2xl p-4 flex items-center gap-3 text-xs text-bb-shadow font-semibold animate-pulse">
                     <i class="fa-solid fa-arrows-rotate animate-spin text-bb-yellow text-sm"></i>
                     <span>Sincronizando la carta brutal con Google Sheets en tiempo real...</span>
@@ -658,7 +794,6 @@
                                         <div class="flex items-center justify-between pt-2 border-t border-bb-cream">
                                             <span class="font-extrabold text-xs md:text-sm text-bb-red" x-text="`S/ ${product.price.toFixed(2)}`"></span>
 
-                                            <!-- .stop evita la propagación del click al contenedor padre para no abrir el detalle por accidente -->
                                             <button @click.stop="addToCartDirectly(product)" 
                                                     class="px-4 py-1.5 bg-bb-red hover:bg-bb-red/95 text-white text-xs font-bold rounded-xl transition shadow-xs hover:scale-102 flex items-center gap-1">
                                                 <i class="fa-solid fa-plus text-[9px]"></i>
@@ -675,7 +810,6 @@
         </div>
     </main>
 
-    <!-- MODAL DE DETALLE DE PRODUCTO (VISTA AMPLIADA) -->
     <div x-show="isDetailOpen" 
          class="fixed inset-0 z-50 overflow-hidden flex items-center justify-center p-4 sm:p-6" 
          style="display: none;"
@@ -686,10 +820,8 @@
          x-transition:leave-start="opacity-100"
          x-transition:leave-end="opacity-0">
         
-        <!-- Fondo oscuro translúcido con desenfoque de fondo -->
         <div class="absolute inset-0 bg-black/70 backdrop-blur-xs transition-opacity" @click="isDetailOpen = false"></div>
 
-        <!-- Ventana Modal de Producto -->
         <div class="bg-white rounded-3xl overflow-hidden max-w-lg w-full shadow-2xl border border-bb-red/15 relative z-10 flex flex-col max-h-[85vh] sm:max-h-[90vh] transform transition-all"
              x-show="isDetailOpen"
              x-transition:enter="transition ease-out duration-300"
@@ -699,20 +831,17 @@
              x-transition:leave-start="opacity-100 translate-y-0 scale-100"
              x-transition:leave-end="opacity-0 translate-y-4 scale-95">
             
-            <!-- Botón de Cerrar -->
             <button @click="isDetailOpen = false" 
                     class="absolute top-4 right-4 z-20 bg-black/60 hover:bg-bb-red text-white w-9 h-9 rounded-full flex items-center justify-center transition shadow-md">
                 <i class="fa-solid fa-xmark text-lg"></i>
             </button>
 
-            <!-- Imagen del Producto Ampliada -->
             <div class="h-60 sm:h-80 w-full relative overflow-hidden bg-bb-cream">
                 <img :src="selectedProductForDetail?.image || 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=500&q=80'" 
                      :alt="selectedProductForDetail?.name" 
                      class="w-full h-full object-cover"
                      onerror="this.src='https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=500&q=80'">
                 
-                <!-- Badge Superior con la Categoría -->
                 <div class="absolute bottom-4 left-4">
                     <span class="bg-bb-red text-white text-[10px] font-extrabold uppercase tracking-widest px-3.5 py-1.5 rounded-full shadow-md border-2 border-bb-yellow"
                           x-text="selectedProductForDetail ? categories.find(c => c.id === selectedProductForDetail.category)?.name : ''">
@@ -720,12 +849,10 @@
                 </div>
             </div>
 
-            <!-- Contenido del Producto en Detalle -->
             <div class="p-6 space-y-4 flex-1 overflow-y-auto">
                 <h3 class="font-brand text-2xl text-bb-dark tracking-wide" x-text="selectedProductForDetail?.name"></h3>
                 <p class="text-xs sm:text-sm text-bb-shadow/80 font-semibold leading-relaxed" x-text="selectedProductForDetail?.description"></p>
                 
-                <!-- Detalle de Precios y Agregar -->
                 <div class="flex items-center justify-between pt-4 border-t border-bb-cream">
                     <div>
                         <span class="text-[10px] text-gray-400 font-extrabold uppercase tracking-wider block">Precio</span>
@@ -742,7 +869,6 @@
         </div>
     </div>
 
-    <!-- SLIDE OVER / CAJÓN DE CARRITO Y CHECKOUT -->
     <div x-show="isCartOpen" class="fixed inset-0 z-50 overflow-hidden" style="display: none;">
         <div class="absolute inset-0 bg-black/60 backdrop-blur-xs transition-opacity" @click="isCartOpen = false"></div>
 
@@ -755,10 +881,8 @@
                  x-transition:leave-start="translate-x-0"
                  x-transition:leave-end="translate-x-full">
                 
-                <!-- Header del cajón -->
                 <div class="p-4 sm:p-5 bg-bb-red text-white flex items-center justify-between flex-shrink-0">
                     <div class="flex items-center gap-2">
-                        <!-- Botón de Atrás si está en checkout -->
                         <button x-show="currentStep === 'checkout'" @click="currentStep = 'cart'" class="text-white hover:text-bb-yellow mr-1 text-xs flex items-center gap-1 bg-white/10 px-2.5 py-1.5 rounded-lg transition font-extrabold">
                             <i class="fa-solid fa-chevron-left text-[10px]"></i> Volver
                         </button>
@@ -780,10 +904,8 @@
                     <button @click="errorMessage = ''" class="text-rose-500 font-bold px-2">X</button>
                 </div>
 
-                <!-- Cuerpo Scrollable -->
                 <div class="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 sm:space-y-6">
                     
-                    <!-- VISTA 1: CARRITO -->
                     <div x-show="currentStep === 'cart'" class="space-y-4">
                         <div x-show="cart.length === 0" class="text-center py-12 space-y-3">
                             <i class="fa-solid fa-cookie-bite text-5xl text-bb-yellow/40 animate-pulse"></i>
@@ -815,10 +937,8 @@
                         </div>
                     </div>
 
-                    <!-- VISTA 2: FORMULARIO CHECKOUT CON MAPA (Optimizado para móvil) -->
                     <div x-show="currentStep === 'checkout'" class="space-y-4 sm:space-y-5">
                         
-                        <!-- Opción de Guardar mis datos -->
                         <div class="bg-bb-red/5 p-3 sm:p-4 rounded-xl border border-bb-red/10 flex items-center justify-between gap-3">
                             <div class="flex-1">
                                 <h4 class="text-[10px] sm:text-xs font-black text-bb-red uppercase tracking-wider">💾 Guardar mis datos</h4>
@@ -860,17 +980,32 @@
                                 </div>
                             </div>
 
-                            <!-- Mensaje indicativo del precio del envío cotizado por WhatsApp -->
-                            <div x-show="checkoutDeliveryType === 'delivery'" class="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-3 sm:p-4 text-xs font-semibold leading-relaxed space-y-1">
-                                <p class="flex items-center gap-1.5 text-amber-800 font-extrabold uppercase tracking-wider text-[10px]">
-                                    <i class="fa-solid fa-circle-info"></i> Cotización de Envío por WhatsApp
-                                </p>
-                                <p class="text-amber-950/80">El costo de delivery no está incluido en este total. Se cotizará directamente con el motorizado en tu chat de WhatsApp basándonos en tu ubicación seleccionada.</p>
-                            </div>
+                            <div x-show="checkoutDeliveryType === 'delivery'" class="space-y-3">
+                                <div>
+                                    <label class="block text-[11px] font-extrabold text-bb-dark mb-1">Dirección exacta *</label>
+                                    <div class="flex gap-2">
+                                        <input type="text" 
+                                               x-model="checkoutAddress" 
+                                               @keydown.enter.prevent="geocodeAddress()"
+                                               placeholder="Calle, Manzana, Lote o Número de Casa" 
+                                               class="flex-1 text-xs py-2.5 px-3 rounded-xl border border-bb-red/20 focus:border-bb-red outline-none bg-bb-cream font-semibold text-bb-dark">
+                                        <button type="button" 
+                                                @click="geocodeAddress()" 
+                                                class="px-4 py-2.5 bg-bb-red hover:bg-bb-red/90 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-sm">
+                                            <i class="fa-solid fa-magnifying-glass-location text-sm"></i>
+                                            <span>Buscar</span>
+                                        </button>
+                                    </div>
+                                </div>
 
-                            <div x-show="checkoutDeliveryType === 'delivery'">
-                                <label class="block text-[11px] font-extrabold text-bb-dark mb-1">Dirección exacta *</label>
-                                <input type="text" x-model="checkoutAddress" placeholder="Calle, Manzana, Lote o Número de Casa" class="w-full text-xs py-2.5 px-3 rounded-xl border border-bb-red/20 focus:border-bb-red outline-none bg-bb-cream font-semibold text-bb-dark">
+                                <div>
+                                    <button type="button"
+                                            @click="getCurrentLocationGPS()"
+                                            class="w-full py-2.5 px-4 bg-bb-yellow/10 hover:bg-bb-yellow/20 text-bb-yellow border-2 border-bb-yellow border-dashed rounded-xl text-xs font-bold transition flex items-center justify-center gap-2">
+                                        <i class="fa-solid fa-location-crosshairs text-sm"></i>
+                                        <span>📍 Usar mi ubicación GPS actual</span>
+                                    </button>
+                                </div>
                             </div>
 
                             <div x-show="checkoutDeliveryType === 'delivery'">
@@ -878,12 +1013,31 @@
                                 <input type="text" x-model="checkoutReference" placeholder="Frente al parque, al costado de tienda, etc." class="w-full text-xs py-2.5 px-3 rounded-xl border border-bb-red/20 focus:border-bb-red outline-none bg-bb-cream font-semibold text-bb-dark">
                             </div>
 
-                            <!-- Mapa para pin manual -->
                             <div x-show="checkoutDeliveryType === 'delivery'" class="space-y-1">
                                 <div class="flex items-center justify-between">
                                     <label class="block text-[11px] font-extrabold text-bb-dark">Ubicación GPS (Haz Clic o Arrastra el Pin manualmente) *</label>
                                 </div>
                                 <div id="map" class="h-40 sm:h-56 rounded-2xl border-2 border-bb-red/20 overflow-hidden shadow-inner mt-1"></div>
+                                
+                                <div class="grid grid-cols-2 gap-2 mt-2">
+                                    <div class="flex flex-col bg-bb-cream p-2.5 rounded-xl border border-bb-red/10">
+                                        <span class="text-[9px] text-gray-400 font-extrabold uppercase">Distancia al Local</span>
+                                        <span class="text-xs font-black text-bb-dark" x-text="deliveryDistance ? `${deliveryDistance.toFixed(2)} km` : 'Calculando...'"></span>
+                                    </div>
+                                    <div class="flex flex-col bg-bb-cream p-2.5 rounded-xl border border-bb-red/10" :class="isOutOfRange ? 'bg-rose-50 border-rose-200' : ''">
+                                        <span class="text-[9px] text-gray-400 font-extrabold uppercase">Costo de Delivery</span>
+                                        <span class="text-xs font-black" :class="isOutOfRange ? 'text-rose-600' : 'text-bb-red'" 
+                                              x-text="isOutOfRange ? 'Fuera de Rango' : `S/ ${deliveryCost.toFixed(2)}`"></span>
+                                    </div>
+                                </div>
+                                
+                                <div x-show="isOutOfRange" class="bg-rose-50 border border-rose-200 text-rose-800 rounded-xl p-3 text-xs font-semibold mt-2">
+                                    <p class="flex items-center gap-1.5 text-rose-800 font-extrabold uppercase tracking-wider text-[10px]">
+                                        <i class="fa-solid fa-triangle-exclamation"></i> Fuera de límite de delivery
+                                    </p>
+                                    <p class="text-rose-950/80">Lo sentimos, la ubicación supera nuestro límite máximo de cobertura de 9 km. Por favor, selecciona un punto más cercano o cámbiate a "Recoger en Local".</p>
+                                </div>
+
                                 <div class="flex items-center justify-between text-[9px] sm:text-[10px] text-bb-shadow/80 font-bold bg-bb-red/5 p-2 rounded-lg mt-1">
                                     <span>📍 Coordenadas marcadas:</span>
                                     <span class="text-bb-red font-mono" x-text="gpsCoords || 'Mueve el marcador en el mapa...'"></span>
@@ -896,7 +1050,6 @@
                             <input type="text" x-model="checkoutNotes" placeholder="Ej: Sin cebolla, cremas aparte, etc." class="w-full text-xs py-2.5 px-3 rounded-xl border border-bb-red/20 focus:border-bb-red outline-none bg-bb-cream font-semibold text-bb-dark">
                         </div>
 
-                        <!-- Pasarela de Pago sin imágenes QR -->
                         <div class="space-y-3 bg-bb-cream p-3 sm:p-4 rounded-2xl border border-bb-red/10">
                             <h4 class="text-xs font-brand text-bb-red uppercase tracking-wider">Pasarela de Pago</h4>
                             <div class="bg-white p-3.5 rounded-xl border border-bb-red/10 flex items-center justify-between shadow-sm">
@@ -909,17 +1062,24 @@
                                 </div>
                                 <button @click="copyToClipboard('914440507')" class="px-3 py-1.5 bg-bb-red/10 text-bb-red font-extrabold text-[10px] rounded-lg hover:bg-bb-red hover:text-white transition">Copiar</button>
                             </div>
-                            <p class="text-[10px] text-bb-shadow/80 font-bold text-center leading-normal">
-                                Copia el número arriba, ingresa a Yape para pagar el total del pedido y envía la captura de pantalla del comprobante en el chat de WhatsApp.
+                            
+                            <div class="text-center pt-1">
+                                <a href="yape://" 
+                                   class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-[#742d8c] hover:bg-[#5c2470] text-white font-extrabold text-xs rounded-xl transition shadow-md">
+                                    <i class="fa-solid fa-mobile-screen-button"></i>
+                                    <span>⚡ Abrir App de Yape en mi celular</span>
+                                </a>
+                            </div>
+
+                            <p class="text-[10px] text-bb-shadow/80 font-bold text-center leading-normal mt-2">
+                                Copia el número arriba o presiona el botón morado para yapear de inmediato. Al finalizar, envía el comprobante al WhatsApp para iniciar la preparación.
                             </p>
                         </div>
                     </div>
                 </div>
 
-                <!-- Footer del Cajón Optimizado y Adaptativo -->
                 <div x-show="cart.length > 0" class="p-3.5 sm:p-5 border-t border-bb-cream bg-white space-y-2 sm:space-y-4 flex-shrink-0 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
                     
-                    <!-- Desglose de Precios (Oculto en móvil durante el paso de checkout para ahorrar espacio masivo) -->
                     <div class="space-y-1 sm:space-y-1.5 text-xs font-bold text-bb-shadow/90" :class="currentStep === 'checkout' ? 'hidden sm:block' : ''">
                         <div class="flex justify-between">
                             <span>Subtotal:</span>
@@ -927,13 +1087,11 @@
                         </div>
                         <div class="flex justify-between text-amber-700" x-show="checkoutDeliveryType === 'delivery'">
                             <span>Delivery:</span>
-                            <span>Por coordinar</span>
+                            <span x-text="isOutOfRange ? 'Fuera de rango' : `S/ ${deliveryCost.toFixed(2)}`"></span>
                         </div>
                     </div>
 
-                    <!-- SECCIÓN DINÁMICA DE ACCIONES -->
                     <div>
-                        <!-- Botón y total en Vista 1: CARRITO -->
                         <div x-show="currentStep === 'cart'" class="space-y-3">
                             <div class="flex justify-between text-sm sm:text-base font-black text-bb-red pt-1 border-t border-bb-cream/60">
                                 <span>Total a pagar:</span>
@@ -945,21 +1103,21 @@
                             </button>
                         </div>
 
-                        <!-- Botón y total en Vista 2: CHECKOUT (Ultra-compacto en móvil) -->
                         <div x-show="currentStep === 'checkout'" class="flex sm:flex-col justify-between items-center gap-3 pt-1 border-t border-bb-cream/60 sm:border-t-0">
-                            <!-- Total de pago compacto a la izquierda en móvil, completo en desktop -->
                             <div class="flex flex-col text-left mr-auto sm:w-full sm:pb-2 sm:border-b sm:border-bb-cream/60">
                                 <span class="text-[8px] sm:text-[9px] text-gray-500 font-extrabold uppercase tracking-wider leading-none">Total a Pagar</span>
-                                <span class="text-base sm:text-lg font-black text-bb-red leading-tight" x-text="`S/ ${getCartTotal().toFixed(2)}`"></span>
-                                <span class="text-[8px] text-amber-600 font-bold block" x-show="checkoutDeliveryType === 'delivery'" x-text="`+ costo de envío`"></span>
+                                <span class="text-base sm:text-lg font-black text-bb-red leading-tight" x-text="`S/ ${getCartTotalWithDelivery().toFixed(2)}`"></span>
+                                <span class="text-[8px] text-amber-600 font-bold block" x-show="checkoutDeliveryType === 'delivery' && !isOutOfRange" x-text="`incluye envío`"></span>
+                                <span class="text-[8px] text-rose-600 font-bold block" x-show="checkoutDeliveryType === 'delivery' && isOutOfRange" x-text="`Fuera de cobertura`"></span>
                             </div>
 
-                            <!-- Botón Confirmar por WhatsApp optimizado para espacios reducidos -->
                             <button @click="sendToWhatsApp()" 
-                                    class="flex-1 sm:w-full py-2.5 sm:py-3.5 px-3 sm:px-4 bg-[#25D366] hover:bg-[#128C7E] text-white font-extrabold rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 text-xs sm:text-sm uppercase tracking-wide">
+                                    :disabled="checkoutDeliveryType === 'delivery' && isOutOfRange"
+                                    :class="(checkoutDeliveryType === 'delivery' && isOutOfRange) ? 'bg-gray-400 cursor-not-allowed shadow-none' : 'bg-[#25D366] hover:bg-[#128C7E]'"
+                                    class="flex-1 sm:w-full py-2.5 sm:py-3.5 px-3 sm:px-4 text-white font-extrabold rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 text-xs sm:text-sm uppercase tracking-wide">
                                 <i class="fa-brands fa-whatsapp text-base sm:text-lg"></i>
-                                <span class="inline sm:hidden">Confirmar</span>
-                                <span class="hidden sm:inline">Confirmar Pedido por WhatsApp</span>
+                                <span class="inline sm:hidden" x-text="isOutOfRange && checkoutDeliveryType === 'delivery' ? 'Bloqueado' : 'Confirmar'"></span>
+                                <span class="hidden sm:inline" x-text="isOutOfRange && checkoutDeliveryType === 'delivery' ? 'Ubicación fuera de rango' : 'Confirmar Pedido por WhatsApp'"></span>
                             </button>
                         </div>
                     </div>
@@ -969,7 +1127,6 @@
         </div>
     </div>
 
-    <!-- NOTIFICACIONES TEMPORALES FLOTANTES -->
     <div x-show="floatingNotification" 
          class="fixed bottom-4 left-4 right-4 md:left-auto md:w-80 bg-bb-dark text-white p-4 rounded-xl shadow-2xl z-50 flex items-center justify-between border border-bb-yellow/20"
          style="display: none;"
@@ -983,7 +1140,6 @@
         <button @click="floatingNotification = ''" class="text-bb-yellow font-black text-xs px-2">OK</button>
     </div>
 
-    <!-- BOTÓN FLOTANTE FIJO (Abajo a la derecha): ABRIR PEDIDO -->
     <button @click="isCartOpen = true" 
             x-show="!isCartOpen" 
             class="fixed bottom-6 right-6 z-40 bg-bb-red hover:bg-bb-red/90 text-white font-extrabold py-3.5 px-5 rounded-full shadow-2xl transition-all duration-300 transform hover:scale-105 flex items-center gap-2.5 border-2 border-bb-yellow"
@@ -993,7 +1149,6 @@
             x-transition:enter-end="opacity-100 translate-y-0 scale-100">
         
         <span class="relative">
-            <!-- Icono de Hamburguesa con badge de cantidad superpuesto -->
             <i class="fa-solid fa-burger text-lg sm:text-xl text-bb-yellow"></i>
             <span x-show="getCartItemsCount() > 0" 
                   class="absolute -top-2.5 -right-2.5 bg-bb-yellow text-bb-dark font-black text-[9px] h-5 w-5 rounded-full flex items-center justify-center border border-bb-red animate-pulse"
