@@ -508,6 +508,7 @@
                     }
 
                     setTimeout(() => {
+                        // Coordenadas iniciales por defecto (Santa María del Pinar, Piura)
                         const defaultLat = -5.1764;
                         const defaultLng = -80.6406;
 
@@ -586,6 +587,7 @@
                         }
                     }
 
+                    // Guardar perfil si aplica
                     if (this.saveUserData) {
                         const profile = {
                             name: this.checkoutName.trim(),
@@ -759,6 +761,7 @@
             </aside>
 
             <div class="lg:col-span-3 space-y-10">
+                
                 <div x-show="isLoadingMenu" class="bg-bb-yellow/10 border border-bb-yellow/30 rounded-2xl p-4 flex items-center gap-3 text-xs text-bb-shadow font-semibold animate-pulse">
                     <i class="fa-solid fa-arrows-rotate animate-spin text-bb-yellow text-sm"></i>
                     <span>Sincronizando la carta brutal con Google Sheets en tiempo real...</span>
@@ -790,6 +793,7 @@
 
                                         <div class="flex items-center justify-between pt-2 border-t border-bb-cream">
                                             <span class="font-extrabold text-xs md:text-sm text-bb-red" x-text="`S/ ${product.price.toFixed(2)}`"></span>
+
                                             <button @click.stop="addToCartDirectly(product)" 
                                                     class="px-4 py-1.5 bg-bb-red hover:bg-bb-red/95 text-white text-xs font-bold rounded-xl transition shadow-xs hover:scale-102 flex items-center gap-1">
                                                 <i class="fa-solid fa-plus text-[9px]"></i>
@@ -1058,9 +1062,17 @@
                                 </div>
                                 <button @click="copyToClipboard('914440507')" class="px-3 py-1.5 bg-bb-red/10 text-bb-red font-extrabold text-[10px] rounded-lg hover:bg-bb-red hover:text-white transition">Copiar</button>
                             </div>
+                            
+                            <div class="text-center pt-1">
+                                <a href="yape://" 
+                                   class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-[#742d8c] hover:bg-[#5c2470] text-white font-extrabold text-xs rounded-xl transition shadow-md">
+                                    <i class="fa-solid fa-mobile-screen-button"></i>
+                                    <span>⚡ Abrir App de Yape en mi celular</span>
+                                </a>
+                            </div>
 
                             <p class="text-[10px] text-bb-shadow/80 font-bold text-center leading-normal mt-2">
-                                Copia el número arriba, ingresa a tu Yape para realizar el pago del total y envía el comprobante en tu chat de WhatsApp al finalizar.
+                                Copia el número arriba o presiona el botón morado para yapear de inmediato. Al finalizar, envía el comprobante al WhatsApp para iniciar la preparación.
                             </p>
                         </div>
                     </div>
