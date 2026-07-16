@@ -5,18 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BIG BITE — Burgers & Salchipapas</title>
     
-    <!-- Tailwind CSS para el diseño premium -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Google Fonts: Plus Jakarta Sans & Righteous -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Righteous&display=swap" rel="stylesheet">
     
-    <!-- FontAwesome para iconos de interfaz de usuario -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- Leaflet.js para el Mapa GPS Interactivo -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
@@ -188,7 +184,7 @@
                     const peruString = now.toLocaleString("en-US", { timeZone: "America/Lima" });
                     const peruDate = new Date(peruString);
                     
-                    const day = peruDate.getDay(); // 0: Domingo, 1: Lunes, ..., 5: Viernes, 6: Sábado
+                    const day = peruDate.getDay();
                     const hours = peruDate.getHours();
                     const minutes = peruDate.getMinutes();
                     const currentTimeInMinutes = hours * 60 + minutes;
@@ -199,11 +195,9 @@
                     const isTimeValid = currentTimeInMinutes >= openingTime && currentTimeInMinutes < closingTime;
 
                     if (this.activeSchedule === 'VSD') {
-                        // Viernes (5), Sábado (6) y Domingo (0)
                         const isDayValid = [0, 5, 6].includes(day);
                         this.isOpen = isDayValid && isTimeValid;
                     } else {
-                        // Solo Sábado (6) y Domingo (0)
                         const isDayValid = [0, 6].includes(day);
                         this.isOpen = isDayValid && isTimeValid;
                     }
@@ -211,7 +205,7 @@
 
                 // CÁLCULO DE DISTANCIA MATEMÁTICA (FÓRMULA DE HAVERSINE)
                 calculateDistance(lat1, lon1, lat2, lon2) {
-                    const R = 6371; // Radio de la Tierra en km
+                    const R = 6371;
                     const dLat = (lat2 - lat1) * Math.PI / 180;
                     const dLon = (lon2 - lon1) * Math.PI / 180;
                     const a = 
@@ -234,22 +228,21 @@
                     
                     this.deliveryDistance = dist;
 
-                    // Escala de precios por rangos de distancia:
                     if (dist < 1.0) {
-                        this.deliveryCost = 3.0; // Menor a 1km = S/ 3
+                        this.deliveryCost = 3.0;
                         this.isOutOfRange = false;
                     } else if (dist >= 1.0 && dist <= 3.0) {
-                        this.deliveryCost = 6.0; // 1-3km = S/ 6
+                        this.deliveryCost = 6.0;
                         this.isOutOfRange = false;
                     } else if (dist > 3.0 && dist <= 6.0) {
-                        this.deliveryCost = 9.0; // 3-6km = S/ 9
+                        this.deliveryCost = 9.0;
                         this.isOutOfRange = false;
                     } else if (dist > 6.0 && dist <= 9.0) {
-                        this.deliveryCost = 13.0; // 6-9km = S/ 13
+                        this.deliveryCost = 13.0;
                         this.isOutOfRange = false;
                     } else {
                         this.deliveryCost = 0;
-                        this.isOutOfRange = true; // Más de 9km = Fuera de cobertura
+                        this.isOutOfRange = true;
                     }
                 },
 
@@ -274,7 +267,6 @@
                             this.onMarkerMove(lat, lng);
                             this.triggerNotification("✅ GPS fijado correctamente.");
 
-                            // Geocodificación inversa
                             try {
                                 const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`, {
                                     headers: { 'Accept-Language': 'es' }
@@ -376,7 +368,6 @@
                                 item[header] = val;
                             });
                             
-                            // Sincronización de Horario Activo
                             if (item.id === 'horario' || (item.categoria === 'config' && item.nombre === 'Horario Activo')) {
                                 if (item.estado) {
                                     const val = item.estado.toUpperCase().trim();
@@ -387,7 +378,6 @@
                                 continue;
                             }
                             
-                            // Logo dinámico
                             if (item.id === 'logo' || item.categoria === 'logo' || item.nombre?.toLowerCase().includes('logo')) {
                                 if (item.imagen_url) {
                                     fetchedLogo = item.imagen_url;
@@ -568,30 +558,34 @@
                     }, 3500);
                 },
 
-                // CORRECCIÓN DEFINITIVA DE REDIRECCIONAMIENTO A YAPE (EVITA ERRORES DE PLAY STORE)
+                // 🚀 LANZADOR DE YAPE ANTICRASH (MÉTODO IFRAME INVISIBLE)
                 openYapeApp() {
                     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
                     const isAndroid = /Android/.test(navigator.userAgent);
                     
-                    if (isAndroid || isIOS) {
-                        const start = Date.now();
-                        // Intentar abrir Yape directamente usando el protocolo nativo de la app
-                        window.location.href = "yape://";
+                    if (isAndroid) {
+                        // En Android dentro de Instagram, usar un iframe evita la redirección rota y el error de "servidor"
+                        const iframe = document.createElement("iframe");
+                        iframe.style.display = "none";
+                        iframe.src = "yape://";
+                        document.body.appendChild(iframe);
                         
-                        // Fallback inteligente: si la app no está instalada o falla el protocolo nativo,
-                        // redirigir a la tienda oficial usando una URL web limpia y segura.
+                        // Remover el iframe tras disparar el intento
                         setTimeout(() => {
-                            // Si han pasado menos de 1.5 segundos, significa que la app no se abrió (la ejecución de JS no se detuvo)
+                            document.body.removeChild(iframe);
+                        }, 600);
+
+                        this.triggerNotification("⚡ Intentando abrir Yape... Si no abre, copia el número.");
+                    } else if (isIOS) {
+                        // En iOS el window.location directo funciona bien si la app existe
+                        const start = Date.now();
+                        window.location.href = "yape://";
+                        setTimeout(() => {
                             if (Date.now() - start < 1500) {
-                                if (isAndroid) {
-                                    window.location.href = "https://play.google.com/store/apps/details?id=com.bcp.innovacp.yape";
-                                } else if (isIOS) {
-                                    window.location.href = "https://apps.apple.com/pe/app/yape/id1250153316";
-                                }
+                                this.triggerNotification("📱 Copia el número y abre tu Yape manualmente.");
                             }
-                        }, 1000);
+                        }, 1200);
                     } else {
-                        // En computadoras de escritorio se les notifica de forma interactiva
                         this.triggerNotification("💻 Opción optimizada para celulares con Yape instalado.");
                     }
                 },
@@ -618,7 +612,6 @@
                         }
                     }
 
-                    // Guardar perfil si aplica
                     if (this.saveUserData) {
                         const profile = {
                             name: this.checkoutName.trim(),
@@ -632,7 +625,7 @@
                         localStorage.removeItem('bigbite_saved_profile');
                     }
 
-                    const businessPhone = "51940279127"; // Teléfono Joaquín
+                    const businessPhone = "51940279127";
                     
                     let msg = `🍔 *NUEVO PEDIDO - BIG BITE* 🍔\n\n`;
                     msg += `👤 *Cliente:* ${this.checkoutName.trim()}\n`;
@@ -679,7 +672,6 @@
         };
     </script>
 
-    <!-- Alpine.js cargado de forma deferida después de registrar la lógica -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
 <body class="bg-bb-cream text-bb-dark font-sans min-h-screen selection:bg-bb-yellow selection:text-bb-dark transition-all duration-150 relative pb-10" 
@@ -687,11 +679,9 @@
       :class="isCartOpen || isDetailOpen ? 'overflow-hidden h-screen' : ''" 
       x-init="initData()">
 
-    <!-- HEADER PRINCIPAL -->
     <header class="bg-white border-b border-bb-red/10 py-4 px-4 sticky top-0 z-40 shadow-sm">
         <div class="max-w-6xl mx-auto flex items-center justify-between">
             <div class="flex items-center gap-3">
-                <!-- LOGO DINÁMICO DESDE GOOGLE SHEETS CON FALLBACK AUTOMÁTICO -->
                 <div id="logo-container" class="w-12 h-12 md:w-14 md:h-14 rounded-full bg-white overflow-hidden shadow-md border-2 border-bb-yellow flex items-center justify-center p-0.5">
                     <img :src="logoUrl" 
                          alt="Logo Big Bite" 
@@ -706,7 +696,6 @@
             </div>
 
             <div class="flex items-center gap-2">
-                <!-- Botón de Instagram oficial de Big Bite -->
                 <a href="https://www.instagram.com/big.bite.pe?utm_source=ig_web_button_share_sheet&igsh=ZDNlZDc0MzIxNw==" 
                    target="_blank" 
                    rel="noopener noreferrer"
@@ -715,7 +704,6 @@
                     <i class="fa-brands fa-instagram text-xl"></i>
                 </a>
 
-                <!-- Carrito de Compras -->
                 <button @click="isCartOpen = true" 
                         class="relative p-3 bg-bb-red/10 hover:bg-bb-red/20 text-bb-red rounded-full transition-all flex items-center justify-center">
                     <i class="fa-solid fa-burger text-xl"></i>
@@ -727,7 +715,6 @@
         </div>
     </header>
 
-    <!-- BARRA DE MENSAJE Y TIEMPO REAL (DINÁMICA ABIERTO/CERRADO) -->
     <div class="bg-bb-red text-white py-2.5 px-4 text-xs">
         <div class="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2">
             <div class="flex items-center gap-2">
@@ -746,490 +733,6 @@
         </div>
     </div>
 
-    <!-- HERO BANNER DE BIENVENIDA -->
     <div class="max-w-6xl mx-auto px-4 mt-6">
         <div class="relative bg-gradient-to-br from-[#FAF6F0] to-[#EAE4D9] rounded-3xl p-6 md:p-10 border border-bb-red/10 overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6 shadow-xs">
-            <div class="space-y-4 text-center md:text-left z-10 max-w-xl">
-                <span class="bg-bb-red/10 text-bb-red text-[10px] font-extrabold uppercase tracking-widest px-3 py-1 rounded-full">
-                    🔥 El verdadero sabor artesanal
-                </span>
-                <h2 class="font-brand text-4xl md:text-5xl text-bb-dark leading-tight">
-                    ¿Hambre de algo <br class="hidden md:inline"> realmente BRUTAL?
-                </h2>
-                <p class="text-xs md:text-sm text-bb-shadow/80 leading-relaxed font-semibold">
-                    Hamburguesas de verdad con carne artesanal de 160 gramos, pan brioche tostado y las combinaciones más deliciosas de Piura.
-                </p>
-                <div class="pt-2">
-                    <button @click="scrollToMenu('hamburguesas')" class="px-6 py-3 bg-bb-red hover:bg-bb-red/90 text-white font-extrabold text-xs rounded-xl transition shadow-md">
-                        🔥 Ver Promociones de Hoy
-                    </button>
-                </div>
-            </div>
-            
-            <div class="w-44 h-44 md:w-56 md:h-56 rounded-full overflow-hidden shadow-xl border-4 border-bb-yellow rotate-3 hover:rotate-0 transition-all duration-300">
-                <img src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=500&q=80" 
-                     alt="Hamburguesas Big Bite" 
-                     class="w-full h-full object-cover">
-            </div>
-        </div>
-    </div>
-
-    <!-- CONTENIDO PRINCIPAL: CATEGORÍAS Y PRODUCTOS -->
-    <main class="max-w-6xl mx-auto px-4 py-8 md:py-12">
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
-            
-            <aside class="lg:col-span-1 sticky top-[84px] z-30 bg-bb-cream lg:bg-transparent -mx-4 px-4 py-2 lg:p-0 lg:m-0 border-b border-bb-red/10 lg:border-none">
-                <h3 class="hidden lg:block font-brand text-lg text-bb-red mb-4 px-1">Nuestra Carta</h3>
-                <div class="flex lg:flex-col gap-2 overflow-x-auto no-scrollbar lg:overflow-visible pb-2 lg:pb-0">
-                    <button @click="selectedCategory = 'todas'" 
-                            class="px-5 py-3 rounded-xl text-xs md:text-sm font-bold whitespace-nowrap tracking-wide transition-all duration-200 text-left w-auto lg:w-full flex items-center justify-between gap-3"
-                            :class="selectedCategory === 'todas' ? 'bg-bb-red text-white shadow-md' : 'bg-white hover:bg-bb-red/5 text-bb-dark border border-bb-red/10'">
-                        <span>🍔 Todo el Menú</span>
-                        <span class="hidden lg:inline text-[10px] bg-bb-dark/5 text-bb-dark px-2 py-0.5 rounded-full" x-text="products.length"></span>
-                    </button>
-                    
-                    <template x-for="cat in categories" :key="cat.id">
-                        <button @click="selectedCategory = cat.id" 
-                                class="px-5 py-3 rounded-xl text-xs md:text-sm font-bold whitespace-nowrap tracking-wide transition-all duration-200 text-left w-auto lg:w-full flex items-center justify-between gap-3"
-                                :class="selectedCategory === cat.id ? 'bg-bb-red text-white shadow-md' : 'bg-white hover:bg-bb-red/5 text-bb-dark border border-bb-red/10'">
-                            <span x-text="cat.name"></span>
-                            <span class="hidden lg:inline text-[10px] bg-bb-dark/5 text-bb-dark px-2 py-0.5 rounded-full" x-text="getProductsCountInCategory(cat.id)"></span>
-                        </button>
-                    </template>
-                </div>
-            </aside>
-
-            <!-- GRILLA DE PRODUCTOS -->
-            <div class="lg:col-span-3 space-y-10">
-                
-                <!-- Indicador visual mientras sincroniza -->
-                <div x-show="isLoadingMenu" class="bg-bb-yellow/10 border border-bb-yellow/30 rounded-2xl p-4 flex items-center gap-3 text-xs text-bb-shadow font-semibold animate-pulse">
-                    <i class="fa-solid fa-arrows-rotate animate-spin text-bb-yellow text-sm"></i>
-                    <span>Sincronizando la carta brutal con Google Sheets en tiempo real...</span>
-                </div>
-
-                <template x-for="cat in categories" :key="cat.id">
-                    <div x-show="shouldShowCategory(cat.id)" class="space-y-4" :id="`sec-${cat.id}`">
-                        <h3 class="font-brand text-xl md:text-2xl text-bb-red border-b-2 border-bb-yellow pb-2 flex justify-between items-center">
-                            <span x-text="cat.name"></span>
-                        </h3>
-
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <template x-for="product in getFilteredProducts(cat.id)" :key="product.id">
-                                <div @click="openProductDetail(product)"
-                                     class="bg-white rounded-2xl border border-bb-red/10 overflow-hidden shadow-xs hover:shadow-md transition-all duration-300 flex items-stretch min-h-[140px] cursor-pointer hover:border-bb-yellow/40">
-                                    
-                                    <div class="w-28 sm:w-36 flex-shrink-0 relative overflow-hidden bg-bb-cream">
-                                        <img :src="product.image || 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=500&q=80'" 
-                                             :alt="product.name" 
-                                             class="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
-                                             onerror="this.src='https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=500&q=80'">
-                                    </div>
-
-                                    <div class="p-4 flex flex-col justify-between flex-1 space-y-2">
-                                        <div>
-                                            <h4 class="font-bold text-sm md:text-base text-bb-dark" x-text="product.name"></h4>
-                                            <p class="text-[11px] md:text-xs text-bb-shadow/70 line-clamp-2 md:line-clamp-3 leading-relaxed mt-1" x-text="product.description"></p>
-                                        </div>
-
-                                        <div class="flex items-center justify-between pt-2 border-t border-bb-cream">
-                                            <span class="font-extrabold text-xs md:text-sm text-bb-red" x-text="`S/ ${product.price.toFixed(2)}`"></span>
-
-                                            <!-- .stop evita la propagación del click al contenedor padre para no abrir el detalle por accidente -->
-                                            <button @click.stop="addToCartDirectly(product)" 
-                                                    class="px-4 py-1.5 bg-bb-red hover:bg-bb-red/95 text-white text-xs font-bold rounded-xl transition shadow-xs hover:scale-102 flex items-center gap-1">
-                                                <i class="fa-solid fa-plus text-[9px]"></i>
-                                                <span>Agregar</span>
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </template>
-                        </div>
-                    </div>
-                </template>
-            </div>
-        </div>
-    </main>
-
-    <!-- MODAL DE DETALLE DE PRODUCTO (VISTA AMPLIADA) -->
-    <div x-show="isDetailOpen" 
-         class="fixed inset-0 z-50 overflow-hidden flex items-center justify-center p-4 sm:p-6" 
-         style="display: none;"
-         x-transition:enter="transition ease-out duration-300"
-         x-transition:enter-start="opacity-0"
-         x-transition:enter-end="opacity-100"
-         x-transition:leave="transition ease-in duration-200"
-         x-transition:leave-start="opacity-100"
-         x-transition:leave-end="opacity-0">
-        
-        <!-- Fondo oscuro translúcido con desenfoque de fondo -->
-        <div class="absolute inset-0 bg-black/70 backdrop-blur-xs transition-opacity" @click="isDetailOpen = false"></div>
-
-        <!-- Ventana Modal de Producto -->
-        <div class="bg-white rounded-3xl overflow-hidden max-w-lg w-full shadow-2xl border border-bb-red/15 relative z-10 flex flex-col max-h-[85vh] sm:max-h-[90vh] transform transition-all"
-             x-show="isDetailOpen"
-             x-transition:enter="transition ease-out duration-300"
-             x-transition:enter-start="opacity-0 translate-y-4 scale-95"
-             x-transition:enter-end="opacity-100 translate-y-0 scale-100"
-             x-transition:leave="transition ease-in duration-200"
-             x-transition:leave-start="opacity-100 translate-y-0 scale-100"
-             x-transition:leave-end="opacity-0 translate-y-4 scale-95">
-            
-            <!-- Botón de Cerrar -->
-            <button @click="isDetailOpen = false" 
-                    class="absolute top-4 right-4 z-20 bg-black/60 hover:bg-bb-red text-white w-9 h-9 rounded-full flex items-center justify-center transition shadow-md">
-                <i class="fa-solid fa-xmark text-lg"></i>
-            </button>
-
-            <!-- Imagen del Producto Ampliada -->
-            <div class="h-60 sm:h-80 w-full relative overflow-hidden bg-bb-cream">
-                <img :src="selectedProductForDetail?.image || 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=500&q=80'" 
-                     :alt="selectedProductForDetail?.name" 
-                     class="w-full h-full object-cover"
-                     onerror="this.src='https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=500&q=80'">
-                
-                <!-- Badge Superior con la Categoría -->
-                <div class="absolute bottom-4 left-4">
-                    <span class="bg-bb-red text-white text-[10px] font-extrabold uppercase tracking-widest px-3.5 py-1.5 rounded-full shadow-md border-2 border-bb-yellow"
-                          x-text="selectedProductForDetail ? categories.find(c => c.id === selectedProductForDetail.category)?.name : ''">
-                    </span>
-                </div>
-            </div>
-
-            <!-- Contenido del Producto en Detalle -->
-            <div class="p-6 space-y-4 flex-1 overflow-y-auto">
-                <h3 class="font-brand text-2xl text-bb-dark tracking-wide" x-text="selectedProductForDetail?.name"></h3>
-                <p class="text-xs sm:text-sm text-bb-shadow/80 font-semibold leading-relaxed" x-text="selectedProductForDetail?.description"></p>
-                
-                <!-- Detalle de Precios y Agregar -->
-                <div class="flex items-center justify-between pt-4 border-t border-bb-cream">
-                    <div>
-                        <span class="text-[10px] text-gray-400 font-extrabold uppercase tracking-wider block">Precio</span>
-                        <span class="font-black text-xl text-bb-red" x-text="`S/ ${selectedProductForDetail?.price.toFixed(2)}`"></span>
-                    </div>
-
-                    <button @click="addToCartDirectly(selectedProductForDetail); isDetailOpen = false" 
-                            class="px-6 py-3 bg-bb-red hover:bg-bb-red/90 text-white text-xs font-extrabold rounded-xl transition shadow-md flex items-center gap-2 transform active:scale-95">
-                        <i class="fa-solid fa-plus text-[10px]"></i>
-                        <span>Agregar al Pedido</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- SLIDE OVER / CAJÓN DE CARRITO Y CHECKOUT -->
-    <div x-show="isCartOpen" class="fixed inset-0 z-50 overflow-hidden" style="display: none;">
-        <div class="absolute inset-0 bg-black/60 backdrop-blur-xs transition-opacity" @click="isCartOpen = false"></div>
-
-        <div class="absolute inset-y-0 right-0 max-w-full flex">
-            <div class="w-screen max-w-lg bg-white flex flex-col h-full shadow-2xl border-l border-bb-red/10"
-                 x-transition:enter="transform transition ease-out duration-300"
-                 x-transition:enter-start="translate-x-full"
-                 x-transition:enter-end="translate-x-0"
-                 x-transition:leave="transform transition ease-in duration-200"
-                 x-transition:leave-start="translate-x-0"
-                 x-transition:leave-end="translate-x-full">
-                
-                <!-- Header del cajón -->
-                <div class="p-4 sm:p-5 bg-bb-red text-white flex items-center justify-between flex-shrink-0">
-                    <div class="flex items-center gap-2">
-                        <!-- Botón de Atrás si está en checkout -->
-                        <button x-show="currentStep === 'checkout'" @click="currentStep = 'cart'" class="text-white hover:text-bb-yellow mr-1 text-xs flex items-center gap-1 bg-white/10 px-2.5 py-1.5 rounded-lg transition font-extrabold">
-                            <i class="fa-solid fa-chevron-left text-[10px]"></i> Volver
-                        </button>
-                        <div class="flex items-center gap-1.5" x-show="currentStep === 'cart'">
-                            <i class="fa-solid fa-burger text-bb-yellow text-lg sm:text-xl"></i>
-                            <h2 class="font-brand text-base sm:text-lg tracking-wide">Tu Pedido Big Bite</h2>
-                        </div>
-                        <div class="flex items-center gap-1.5" x-show="currentStep === 'checkout'">
-                            <h2 class="font-brand text-base sm:text-lg tracking-wide">Finalizar Pedido</h2>
-                        </div>
-                    </div>
-                    <button @click="isCartOpen = false" class="text-white hover:text-bb-yellow text-lg sm:text-xl p-1">
-                        <i class="fa-solid fa-xmark"></i>
-                    </button>
-                </div>
-
-                <div x-show="errorMessage" class="bg-rose-50 text-rose-800 text-xs px-5 py-3 border-b border-rose-200 flex items-center justify-between flex-shrink-0">
-                    <span x-text="errorMessage" class="font-semibold"></span>
-                    <button @click="errorMessage = ''" class="text-rose-500 font-bold px-2">X</button>
-                </div>
-
-                <!-- Cuerpo Scrollable -->
-                <div class="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 sm:space-y-6">
-                    
-                    <!-- VISTA 1: CARRITO -->
-                    <div x-show="currentStep === 'cart'" class="space-y-4">
-                        <div x-show="cart.length === 0" class="text-center py-12 space-y-3">
-                            <i class="fa-solid fa-cookie-bite text-5xl text-bb-yellow/40 animate-pulse"></i>
-                            <p class="text-xs font-bold text-bb-shadow/80">¿Aún no has agregado ninguna hamburguesa brutal?</p>
-                        </div>
-
-                        <div x-show="cart.length > 0" class="divide-y divide-bb-cream">
-                            <template x-for="item in cart" :key="item.id">
-                                <div class="py-4 flex items-center justify-between gap-4">
-                                    <div class="flex-1">
-                                        <h4 class="font-bold text-xs md:text-sm text-bb-dark" x-text="item.name"></h4>
-                                        <p class="text-[11px] font-extrabold text-bb-shadow/70 mt-0.5" x-text="`S/ ${item.price.toFixed(2)} c/u`"></p>
-                                    </div>
-
-                                    <div class="flex items-center gap-2 border border-bb-red/20 rounded-xl px-2 py-1 bg-bb-cream">
-                                        <button @click="decreaseQty(item)" class="text-bb-red hover:text-bb-dark px-1.5 py-0.5 text-xs font-bold"><i class="fa-solid fa-minus"></i></button>
-                                        <span class="text-xs font-bold text-bb-dark px-1" x-text="item.quantity"></span>
-                                        <button @click="increaseQty(item)" class="text-bb-red hover:text-bb-dark px-1.5 py-0.5 text-xs font-bold"><i class="fa-solid fa-plus"></i></button>
-                                    </div>
-
-                                    <div class="text-right min-w-[70px]">
-                                        <span class="font-extrabold text-xs md:text-sm text-bb-dark" x-text="`S/ ${(item.price * item.quantity).toFixed(2)}`"></span>
-                                        <button @click="removeItem(item)" class="block text-rose-400 hover:text-rose-600 text-xs mt-1 ml-auto p-1">
-                                            <i class="fa-solid fa-trash"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                            </template>
-                        </div>
-                    </div>
-
-                    <!-- VISTA 2: FORMULARIO CHECKOUT CON MAPA (Optimizado para móvil) -->
-                    <div x-show="currentStep === 'checkout'" class="space-y-4 sm:space-y-5">
-                        
-                        <!-- Opción de Guardar mis datos -->
-                        <div class="bg-bb-red/5 p-3 sm:p-4 rounded-xl border border-bb-red/10 flex items-center justify-between gap-3">
-                            <div class="flex-1">
-                                <h4 class="text-[10px] sm:text-xs font-black text-bb-red uppercase tracking-wider">💾 Guardar mis datos</h4>
-                                <p class="text-[9px] sm:text-[10px] text-bb-shadow/80 font-bold mt-0.5">Rellena el formulario automáticamente en tus próximas compras.</p>
-                            </div>
-                            <label class="relative inline-flex items-center cursor-pointer">
-                                <input type="checkbox" x-model="saveUserData" class="sr-only peer">
-                                <div class="w-9 h-5 bg-gray-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-bb-red"></div>
-                            </label>
-                        </div>
-
-                        <div class="space-y-3">
-                            <h3 class="font-brand text-xs sm:text-sm text-bb-red border-b border-bb-yellow pb-1 uppercase tracking-wider">Datos Personales</h3>
-                            <div>
-                                <label class="block text-[11px] font-extrabold text-bb-dark mb-1">Nombre completo *</label>
-                                <input type="text" x-model="checkoutName" placeholder="Tu nombre y apellido" class="w-full text-xs py-2.5 px-3 rounded-xl border border-bb-red/20 focus:border-bb-red focus:ring-1 focus:ring-bb-red outline-none bg-bb-cream font-semibold text-bb-dark">
-                            </div>
-                            <div>
-                                <label class="block text-[11px] font-extrabold text-bb-dark mb-1">Celular (9 dígitos, ej: 9XXXXXXXX) *</label>
-                                <input type="tel" x-model="checkoutPhone" maxlength="9" placeholder="912345678" class="w-full text-xs py-2.5 px-3 rounded-xl border border-bb-red/20 focus:border-bb-red focus:ring-1 focus:ring-bb-red outline-none bg-bb-cream font-semibold text-bb-dark">
-                            </div>
-                        </div>
-
-                        <div class="space-y-3">
-                            <h3 class="font-brand text-xs sm:text-sm text-bb-red border-b border-bb-yellow pb-1 uppercase tracking-wider">Detalles del Envío</h3>
-                            <div>
-                                <label class="block text-[11px] font-extrabold text-bb-dark mb-1">Forma de Entrega *</label>
-                                <div class="grid grid-cols-2 gap-2 mb-2">
-                                    <button @click="checkoutDeliveryType = 'delivery'" 
-                                            :class="checkoutDeliveryType === 'delivery' ? 'bg-bb-red text-white font-bold' : 'bg-bb-cream text-bb-shadow'"
-                                            class="py-2 rounded-xl text-xs text-center transition font-semibold border border-bb-red/10">
-                                        🚗 Delivery
-                                    </button>
-                                    <button @click="checkoutDeliveryType = 'local'" 
-                                            :class="checkoutDeliveryType === 'local' ? 'bg-bb-red text-white font-bold' : 'bg-bb-cream text-bb-shadow'"
-                                            class="py-2 rounded-xl text-xs text-center transition font-semibold border border-bb-red/10">
-                                        🏪 Recoger en Local
-                                    </button>
-                                </div>
-                            </div>
-
-                            <!-- INPUT DE DIRECCIÓN CON BUSCADOR DE MAPA ASOCIADO Y BOTÓN GPS -->
-                            <div x-show="checkoutDeliveryType === 'delivery'" class="space-y-3">
-                                <div>
-                                    <label class="block text-[11px] font-extrabold text-bb-dark mb-1">Dirección exacta *</label>
-                                    <div class="flex gap-2">
-                                        <input type="text" 
-                                               x-model="checkoutAddress" 
-                                               @keydown.enter.prevent="geocodeAddress()"
-                                               placeholder="Calle, Manzana, Lote o Número de Casa" 
-                                               class="flex-1 text-xs py-2.5 px-3 rounded-xl border border-bb-red/20 focus:border-bb-red outline-none bg-bb-cream font-semibold text-bb-dark">
-                                        <button type="button" 
-                                                @click="geocodeAddress()" 
-                                                class="px-4 py-2.5 bg-bb-red hover:bg-bb-red/90 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-sm">
-                                            <i class="fa-solid fa-magnifying-glass-location text-sm"></i>
-                                            <span>Buscar</span>
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <button type="button"
-                                            @click="getCurrentLocationGPS()"
-                                            class="w-full py-2.5 px-4 bg-bb-yellow/10 hover:bg-bb-yellow/20 text-bb-yellow border-2 border-bb-yellow border-dashed rounded-xl text-xs font-bold transition flex items-center justify-center gap-2">
-                                        <i class="fa-solid fa-location-crosshairs text-sm"></i>
-                                        <span>📍 Usar mi ubicación GPS actual</span>
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div x-show="checkoutDeliveryType === 'delivery'">
-                                <label class="block text-[11px] font-extrabold text-bb-dark mb-1">Referencia (ej: frente al parque) <span class="text-gray-400 font-normal">(Opcional)</span></label>
-                                <input type="text" x-model="checkoutReference" placeholder="Frente al parque, al costado de tienda, etc." class="w-full text-xs py-2.5 px-3 rounded-xl border border-bb-red/20 focus:border-bb-red outline-none bg-bb-cream font-semibold text-bb-dark">
-                            </div>
-
-                            <!-- Mapa para pin manual -->
-                            <div x-show="checkoutDeliveryType === 'delivery'" class="space-y-1">
-                                <div class="flex items-center justify-between">
-                                    <label class="block text-[11px] font-extrabold text-bb-dark">Ubicación GPS (Haz Clic o Arrastra el Pin manualmente) *</label>
-                                </div>
-                                <div id="map" class="h-40 sm:h-56 rounded-2xl border-2 border-bb-red/20 overflow-hidden shadow-inner mt-1"></div>
-                                
-                                <!-- TARJETAS DINÁMICAS DE DISTANCIA Y PRECIO -->
-                                <div class="grid grid-cols-2 gap-2 mt-2">
-                                    <div class="flex flex-col bg-bb-cream p-2.5 rounded-xl border border-bb-red/10">
-                                        <span class="text-[9px] text-gray-400 font-extrabold uppercase">Distancia al Local</span>
-                                        <span class="text-xs font-black text-bb-dark" x-text="deliveryDistance ? `${deliveryDistance.toFixed(2)} km` : 'Calculando...'"></span>
-                                    </div>
-                                    <div class="flex flex-col bg-bb-cream p-2.5 rounded-xl border border-bb-red/10" :class="isOutOfRange ? 'bg-rose-50 border-rose-200' : ''">
-                                        <span class="text-[9px] text-gray-400 font-extrabold uppercase">Costo de Delivery</span>
-                                        <span class="text-xs font-black" :class="isOutOfRange ? 'text-rose-600' : 'text-bb-red'" 
-                                              x-text="isOutOfRange ? 'Fuera de Rango' : `S/ ${deliveryCost.toFixed(2)}`"></span>
-                                    </div>
-                                </div>
-                                
-                                <!-- MENSAJE DE ADVERTENCIA PARA ZONA FUERA DE RANGO -->
-                                <div x-show="isOutOfRange" class="bg-rose-50 border border-rose-200 text-rose-800 rounded-xl p-3 text-xs font-semibold mt-2">
-                                    <p class="flex items-center gap-1.5 text-rose-800 font-extrabold uppercase tracking-wider text-[10px]">
-                                        <i class="fa-solid fa-triangle-exclamation"></i> Fuera de límite de delivery
-                                    </p>
-                                    <p class="text-rose-950/80">Lo sentimos, la ubicación supera nuestro límite máximo de cobertura de 9 km. Por favor, selecciona un punto más cercano o cámbiate a "Recoger en Local".</p>
-                                </div>
-
-                                <div class="flex items-center justify-between text-[9px] sm:text-[10px] text-bb-shadow/80 font-bold bg-bb-red/5 p-2 rounded-lg mt-1">
-                                    <span>📍 Coordenadas marcadas:</span>
-                                    <span class="text-bb-red font-mono" x-text="gpsCoords || 'Mueve el marcador en el mapa...'"></span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div>
-                            <label class="block text-[11px] font-extrabold text-bb-dark mb-1">Notas especiales para la cocina (Opcional)</label>
-                            <input type="text" x-model="checkoutNotes" placeholder="Ej: Sin cebolla, cremas aparte, etc." class="w-full text-xs py-2.5 px-3 rounded-xl border border-bb-red/20 focus:border-bb-red outline-none bg-bb-cream font-semibold text-bb-dark">
-                        </div>
-
-                        <!-- Pasarela de Pago sin imágenes QR -->
-                        <div class="space-y-3 bg-bb-cream p-3 sm:p-4 rounded-2xl border border-bb-red/10">
-                            <h4 class="text-xs font-brand text-bb-red uppercase tracking-wider">Pasarela de Pago</h4>
-                            <div class="bg-white p-3.5 rounded-xl border border-bb-red/10 flex items-center justify-between shadow-sm">
-                                <div class="flex items-center gap-2.5">
-                                    <div class="bg-[#742d8c] text-white font-extrabold text-[9px] px-1.5 py-0.5 rounded-md">YAPE</div>
-                                    <div class="text-[11px] text-bb-dark">
-                                        <p class="font-extrabold text-xs">914 440 507</p>
-                                        <p class="text-[9px] sm:text-[10px] text-bb-shadow/80 font-bold">Joaquin Andre Sanchez More</p>
-                                    </div>
-                                </div>
-                                <button @click="copyToClipboard('914440507')" class="px-3 py-1.5 bg-bb-red/10 text-bb-red font-extrabold text-[10px] rounded-lg hover:bg-bb-red hover:text-white transition">Copiar</button>
-                            </div>
-                            
-                            <!-- ACCESO DIRECTO A LA APLICACIÓN DE YAPE PARA MÓVILES (OPTIMIZADO CON JS) -->
-                            <div class="text-center pt-1">
-                                <button type="button"
-                                        @click="openYapeApp()" 
-                                        class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-[#742d8c] hover:bg-[#5c2470] text-white font-extrabold text-xs rounded-xl transition shadow-md">
-                                    <i class="fa-solid fa-mobile-screen-button"></i>
-                                    <span>⚡ Abrir App de Yape en mi celular</span>
-                                </button>
-                            </div>
-
-                            <p class="text-[10px] text-bb-shadow/80 font-bold text-center leading-normal mt-2">
-                                Copia el número arriba o presiona el botón morado para yapear de inmediato. Al finalizar, envía el comprobante al WhatsApp para iniciar la preparación.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Footer del Cajón Optimizado y Adaptativo -->
-                <div x-show="cart.length > 0" class="p-3.5 sm:p-5 border-t border-bb-cream bg-white space-y-2 sm:space-y-4 flex-shrink-0 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
-                    
-                    <!-- Desglose de Precios Dinámico -->
-                    <div class="space-y-1 sm:space-y-1.5 text-xs font-bold text-bb-shadow/90" :class="currentStep === 'checkout' ? 'hidden sm:block' : ''">
-                        <div class="flex justify-between">
-                            <span>Subtotal:</span>
-                            <span x-text="`S/ ${getCartTotal().toFixed(2)}`"></span>
-                        </div>
-                        <div class="flex justify-between text-amber-700" x-show="checkoutDeliveryType === 'delivery'">
-                            <span>Delivery:</span>
-                            <span x-text="isOutOfRange ? 'Fuera de rango' : `S/ ${deliveryCost.toFixed(2)}`"></span>
-                        </div>
-                    </div>
-
-                    <!-- SECCIÓN DINÁMICA DE ACCIONES -->
-                    <div>
-                        <!-- Botón y total en Vista 1: CARRITO -->
-                        <div x-show="currentStep === 'cart'" class="space-y-3">
-                            <div class="flex justify-between text-sm sm:text-base font-black text-bb-red pt-1 border-t border-bb-cream/60">
-                                <span>Total a pagar:</span>
-                                <span x-text="`S/ ${getCartTotal().toFixed(2)}`"></span>
-                            </div>
-                            <button @click="goToCheckout()" 
-                                    class="w-full py-3 sm:py-4 bg-bb-red hover:bg-bb-red/90 text-white font-extrabold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 text-xs sm:text-sm uppercase tracking-wide">
-                                Proceder al pago <i class="fa-solid fa-arrow-right text-[10px] sm:text-xs"></i>
-                            </button>
-                        </div>
-
-                        <!-- Botón y total en Vista 2: CHECKOUT (Ultra-compacto en móvil) -->
-                        <div x-show="currentStep === 'checkout'" class="flex sm:flex-col justify-between items-center gap-3 pt-1 border-t border-bb-cream/60 sm:border-t-0">
-                            <!-- Total de pago compacto a la izquierda en móvil, completo en desktop -->
-                            <div class="flex flex-col text-left mr-auto sm:w-full sm:pb-2 sm:border-b sm:border-bb-cream/60">
-                                <span class="text-[8px] sm:text-[9px] text-gray-500 font-extrabold uppercase tracking-wider leading-none">Total a Pagar</span>
-                                <span class="text-base sm:text-lg font-black text-bb-red leading-tight" x-text="`S/ ${getCartTotalWithDelivery().toFixed(2)}`"></span>
-                                <span class="text-[8px] text-amber-600 font-bold block" x-show="checkoutDeliveryType === 'delivery' && !isOutOfRange" x-text="`incluye envío`"></span>
-                                <span class="text-[8px] text-rose-600 font-bold block" x-show="checkoutDeliveryType === 'delivery' && isOutOfRange" x-text="`Fuera de cobertura`"></span>
-                            </div>
-
-                            <!-- Botón Confirmar por WhatsApp optimizado y bloqueable si está fuera de rango -->
-                            <button @click="sendToWhatsApp()" 
-                                    :disabled="checkoutDeliveryType === 'delivery' && isOutOfRange"
-                                    :class="(checkoutDeliveryType === 'delivery' && isOutOfRange) ? 'bg-gray-400 cursor-not-allowed shadow-none' : 'bg-[#25D366] hover:bg-[#128C7E]'"
-                                    class="flex-1 sm:w-full py-2.5 sm:py-3.5 px-3 sm:px-4 text-white font-extrabold rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 text-xs sm:text-sm uppercase tracking-wide">
-                                <i class="fa-brands fa-whatsapp text-base sm:text-lg"></i>
-                                <span class="inline sm:hidden" x-text="isOutOfRange && checkoutDeliveryType === 'delivery' ? 'Bloqueado' : 'Confirmar'"></span>
-                                <span class="hidden sm:inline" x-text="isOutOfRange && checkoutDeliveryType === 'delivery' ? 'Ubicación fuera de rango' : 'Confirmar Pedido por WhatsApp'"></span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-            </div>
-        </div>
-    </div>
-
-    <!-- NOTIFICACIONES TEMPORALES FLOTANTES -->
-    <div x-show="floatingNotification" 
-         class="fixed bottom-4 left-4 right-4 md:left-auto md:w-80 bg-bb-dark text-white p-4 rounded-xl shadow-2xl z-50 flex items-center justify-between border border-bb-yellow/20"
-         style="display: none;"
-         x-transition:enter="transition ease-out duration-300"
-         x-transition:enter-start="opacity-0 translate-y-4"
-         x-transition:enter-end="opacity-100 translate-y-0"
-         x-transition:leave="transition ease-in duration-200"
-         x-transition:leave-start="opacity-100 translate-y-0"
-         x-transition:leave-end="opacity-0 translate-y-4">
-        <span class="text-xs font-bold" x-text="floatingNotification"></span>
-        <button @click="floatingNotification = ''" class="text-bb-yellow font-black text-xs px-2">OK</button>
-    </div>
-
-    <!-- BOTÓN FLOTANTE FIJO (Abajo a la derecha): ABRIR PEDIDO -->
-    <button @click="isCartOpen = true" 
-            x-show="!isCartOpen" 
-            class="fixed bottom-6 right-6 z-40 bg-bb-red hover:bg-bb-red/90 text-white font-extrabold py-3.5 px-5 rounded-full shadow-2xl transition-all duration-300 transform hover:scale-105 flex items-center gap-2.5 border-2 border-bb-yellow"
-            style="display: none;"
-            x-transition:enter="transition ease-out duration-300"
-            x-transition:enter-start="opacity-0 translate-y-10 scale-95"
-            x-transition:enter-end="opacity-100 translate-y-0 scale-100">
-        
-        <span class="relative">
-            <!-- Icono de Hamburguesa con badge de cantidad superpuesto -->
-            <i class="fa-solid fa-burger text-lg sm:text-xl text-bb-yellow"></i>
-            <span x-show="getCartItemsCount() > 0" 
-                  class="absolute -top-2.5 -right-2.5 bg-bb-yellow text-bb-dark font-black text-[9px] h-5 w-5 rounded-full flex items-center justify-center border border-bb-red animate-pulse"
-                  x-text="getCartItemsCount()"></span>
-        </span>
-        <span class="text-xs sm:text-sm tracking-wide uppercase">Abrir Pedido</span>
-    </button>
-
-</body>
-</html>
+            <div class="space-y-4 text-center
