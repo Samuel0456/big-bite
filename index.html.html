@@ -73,9 +73,10 @@
                 activeSchedule: 'SD', // Por defecto Sábados y Domingos
                 isOpen: false,
 
-                // Detalle del Producto Ampliado
+                // Detalle del Producto Ampliado y Selector de cantidad previo
                 isDetailOpen: false,
                 selectedProductForDetail: null,
+                modalQuantity: 1,
                 
                 // Formulario de Checkout
                 checkoutName: '',
@@ -426,6 +427,7 @@
 
                 openProductDetail(product) {
                     this.selectedProductForDetail = product;
+                    this.modalQuantity = 1; // Inicializar cantidad del selector en 1 siempre
                     this.isDetailOpen = true;
                 },
 
@@ -437,18 +439,26 @@
                     return this.products.filter(p => p.category === categoryId).length;
                 },
 
-                addToCartDirectly(product) {
+                // FUNCIÓN ROBUSTA DE AGREGADO CON CANTIDAD ESPECIFICADA PREVIAMENTE
+                addToCartWithQty(product, qty) {
+                    if (!this.isOpen) {
+                        this.triggerNotification("❌ No puedes agregar productos. La cocina está cerrada.");
+                        return;
+                    }
+                    const amount = parseInt(qty) || 1;
                     const existingItem = this.cart.find(item => item.id === product.id);
                     if (existingItem) {
-                        existingItem.quantity++;
+                        existingItem.quantity += amount;
                     } else {
                         this.cart.push({
                             id: product.id,
                             name: product.name,
                             price: product.price,
-                            quantity: 1
+                            image: product.image, // Guardar la imagen para Request 6
+                            quantity: amount
                         });
                     }
+                    this.triggerNotification(`🛒 Agregado: ${amount}x ${product.name}`);
                 },
 
                 increaseQty(item) {
@@ -495,6 +505,10 @@
                 },
 
                 goToCheckout() {
+                    if (!this.isOpen) {
+                        this.errorMessage = "La cocina está cerrada. No es posible proceder al pago.";
+                        return;
+                    }
                     this.currentStep = 'checkout';
                     this.initMap();
                 },
@@ -508,7 +522,6 @@
                     }
 
                     setTimeout(() => {
-                        // Coordenadas iniciales por defecto (Santa María del Pinar, Piura)
                         const defaultLat = -5.1764;
                         const defaultLng = -80.6406;
 
@@ -568,6 +581,10 @@
                 sendToWhatsApp() {
                     this.errorMessage = '';
 
+                    if (!this.isOpen) {
+                        this.errorMessage = "Lo sentimos, la cocina cerró. No es posible procesar el pedido.";
+                        return;
+                    }
                     if (!this.checkoutName.trim()) {
                         this.errorMessage = "Debes ingresar tu Nombre completo.";
                         return;
@@ -587,7 +604,6 @@
                         }
                     }
 
-                    // Guardar perfil si aplica
                     if (this.saveUserData) {
                         const profile = {
                             name: this.checkoutName.trim(),
@@ -655,6 +671,7 @@
       :class="isCartOpen || isDetailOpen ? 'overflow-hidden h-screen' : ''" 
       x-init="initData()">
 
+    <!-- HEADER PRINCIPAL -->
     <header class="bg-white border-b border-bb-red/10 py-4 px-4 sticky top-0 z-40 shadow-sm">
         <div class="max-w-6xl mx-auto flex items-center justify-between">
             <div class="flex items-center gap-3">
@@ -691,6 +708,7 @@
         </div>
     </header>
 
+    <!-- BARRA DE MENSAJE Y TIEMPO REAL -->
     <div class="bg-bb-red text-white py-2.5 px-4 text-xs">
         <div class="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2">
             <div class="flex items-center gap-2">
@@ -709,6 +727,7 @@
         </div>
     </div>
 
+    <!-- HERO BANNER DE BIENVENIDA -->
     <div class="max-w-6xl mx-auto px-4 mt-6">
         <div class="relative bg-gradient-to-br from-[#FAF6F0] to-[#EAE4D9] rounded-3xl p-6 md:p-10 border border-bb-red/10 overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6 shadow-xs">
             <div class="space-y-4 text-center md:text-left z-10 max-w-xl">
@@ -721,6 +740,10 @@
                 <p class="text-xs md:text-sm text-bb-shadow/80 leading-relaxed font-semibold">
                     Hamburguesas de verdad con carne artesanal de 160 gramos, pan brioche tostado y las combinaciones más deliciosas de Piura.
                 </p>
+                <!-- DIRECCIÓN DE PEDIDO CON FLECHA ANIMADA (Request 5) -->
+                <div class="text-bb-red font-bold text-xs flex items-center justify-center md:justify-start gap-1 mt-1 animate-bounce">
+                    <span>👇 ¡Pide en nuestra carta aquí abajo! 👇</span>
+                </div>
                 <div class="pt-2">
                     <button @click="scrollToMenu('hamburguesas')" class="px-6 py-3 bg-bb-red hover:bg-bb-red/90 text-white font-extrabold text-xs rounded-xl transition shadow-md">
                         🔥 Ver Promociones de Hoy
@@ -736,6 +759,7 @@
         </div>
     </div>
 
+    <!-- CONTENIDO PRINCIPAL -->
     <main class="max-w-6xl mx-auto px-4 py-8 md:py-12">
         <div class="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
             
@@ -775,6 +799,7 @@
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <template x-for="product in getFilteredProducts(cat.id)" :key="product.id">
+                                <!-- LA TARJETA COMPLETA ABRE EL DETALLE PARA INDICAR CANTIDAD (Request 4) -->
                                 <div @click="openProductDetail(product)"
                                      class="bg-white rounded-2xl border border-bb-red/10 overflow-hidden shadow-xs hover:shadow-md transition-all duration-300 flex items-stretch min-h-[140px] cursor-pointer hover:border-bb-yellow/40">
                                     
@@ -794,7 +819,8 @@
                                         <div class="flex items-center justify-between pt-2 border-t border-bb-cream">
                                             <span class="font-extrabold text-xs md:text-sm text-bb-red" x-text="`S/ ${product.price.toFixed(2)}`"></span>
 
-                                            <button @click.stop="addToCartDirectly(product)" 
+                                            <!-- EL BOTÓN REDIRIGE AL SELECTOR DE CANTIDAD PRIMERO (Request 4) -->
+                                            <button @click.stop="openProductDetail(product)" 
                                                     class="px-4 py-1.5 bg-bb-red hover:bg-bb-red/95 text-white text-xs font-bold rounded-xl transition shadow-xs hover:scale-102 flex items-center gap-1">
                                                 <i class="fa-solid fa-plus text-[9px]"></i>
                                                 <span>Agregar</span>
@@ -810,6 +836,7 @@
         </div>
     </main>
 
+    <!-- MODAL DE DETALLE DE PRODUCTO CON SELECTOR DE CANTIDAD PREVIO (Request 4) -->
     <div x-show="isDetailOpen" 
          class="fixed inset-0 z-50 overflow-hidden flex items-center justify-center p-4 sm:p-6" 
          style="display: none;"
@@ -853,22 +880,33 @@
                 <h3 class="font-brand text-2xl text-bb-dark tracking-wide" x-text="selectedProductForDetail?.name"></h3>
                 <p class="text-xs sm:text-sm text-bb-shadow/80 font-semibold leading-relaxed" x-text="selectedProductForDetail?.description"></p>
                 
+                <!-- CONTROL INTERACTIVO DE CANTIDAD ANTES DE CONFIRMAR (Request 4) -->
+                <div class="flex items-center justify-between bg-bb-cream p-3 rounded-xl border border-bb-red/10">
+                    <span class="text-xs font-bold text-bb-dark">¿Cuántas porciones brutales deseas?</span>
+                    <div class="flex items-center gap-3 bg-white border border-bb-red/20 rounded-xl px-2.5 py-1">
+                        <button type="button" @click="if(modalQuantity > 1) modalQuantity--" class="text-bb-red hover:text-bb-dark font-black px-1 text-sm"><i class="fa-solid fa-minus"></i></button>
+                        <span class="text-sm font-black text-bb-dark min-w-[20px] text-center" x-text="modalQuantity"></span>
+                        <button type="button" @click="modalQuantity++" class="text-bb-red hover:text-bb-dark font-black px-1 text-sm"><i class="fa-solid fa-plus"></i></button>
+                    </div>
+                </div>
+
                 <div class="flex items-center justify-between pt-4 border-t border-bb-cream">
                     <div>
-                        <span class="text-[10px] text-gray-400 font-extrabold uppercase tracking-wider block">Precio</span>
+                        <span class="text-[10px] text-gray-400 font-extrabold uppercase tracking-wider block">Precio Unitario</span>
                         <span class="font-black text-xl text-bb-red" x-text="`S/ ${selectedProductForDetail?.price.toFixed(2)}`"></span>
                     </div>
 
-                    <button @click="addToCartDirectly(selectedProductForDetail); isDetailOpen = false" 
+                    <button @click="addToCartWithQty(selectedProductForDetail, modalQuantity); isDetailOpen = false" 
                             class="px-6 py-3 bg-bb-red hover:bg-bb-red/90 text-white text-xs font-extrabold rounded-xl transition shadow-md flex items-center gap-2 transform active:scale-95">
                         <i class="fa-solid fa-plus text-[10px]"></i>
-                        <span>Agregar al Pedido</span>
+                        <span>Confirmar e Incluir</span>
                     </button>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- SLIDE OVER / CAJÓN DE CARRITO Y CHECKOUT -->
     <div x-show="isCartOpen" class="fixed inset-0 z-50 overflow-hidden" style="display: none;">
         <div class="absolute inset-0 bg-black/60 backdrop-blur-xs transition-opacity" @click="isCartOpen = false"></div>
 
@@ -906,7 +944,16 @@
 
                 <div class="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 sm:space-y-6">
                     
+                    <!-- VISTA 1: CARRITO -->
                     <div x-show="currentStep === 'cart'" class="space-y-4">
+                        <!-- BANNER ALERTA DE COCINA CERRADA (Request 1) -->
+                        <div x-show="!isOpen" class="bg-rose-50 border border-rose-200 text-rose-800 rounded-xl p-3 text-xs font-semibold">
+                            <p class="flex items-center gap-1.5 text-rose-800 font-extrabold uppercase tracking-wider text-[10px]">
+                                <i class="fa-solid fa-circle-exclamation"></i> Cocina Cerrada en este momento
+                            </p>
+                            <p class="text-rose-950/80 mt-0.5">Lo sentimos, nos encontramos fuera de nuestro horario de reparto. No es posible tramitar la compra hasta la apertura.</p>
+                        </div>
+
                         <div x-show="cart.length === 0" class="text-center py-12 space-y-3">
                             <i class="fa-solid fa-cookie-bite text-5xl text-bb-yellow/40 animate-pulse"></i>
                             <p class="text-xs font-bold text-bb-shadow/80">¿Aún no has agregado ninguna hamburguesa brutal?</p>
@@ -915,6 +962,13 @@
                         <div x-show="cart.length > 0" class="divide-y divide-bb-cream">
                             <template x-for="item in cart" :key="item.id">
                                 <div class="py-4 flex items-center justify-between gap-4">
+                                    <!-- IMAGEN MINIATURA INCORPORADA AL VER TU PEDIDO (Request 6) -->
+                                    <div class="w-12 h-12 rounded-xl overflow-hidden bg-bb-cream border border-bb-red/10 flex-shrink-0">
+                                        <img :src="item.image || 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=500&q=80'" 
+                                             alt="" 
+                                             class="w-full h-full object-cover">
+                                    </div>
+
                                     <div class="flex-1">
                                         <h4 class="font-bold text-xs md:text-sm text-bb-dark" x-text="item.name"></h4>
                                         <p class="text-[11px] font-extrabold text-bb-shadow/70 mt-0.5" x-text="`S/ ${item.price.toFixed(2)} c/u`"></p>
@@ -937,6 +991,7 @@
                         </div>
                     </div>
 
+                    <!-- VISTA 2: FORMULARIO CHECKOUT CON MAPA -->
                     <div x-show="currentStep === 'checkout'" class="space-y-4 sm:space-y-5">
                         
                         <div class="bg-bb-red/5 p-3 sm:p-4 rounded-xl border border-bb-red/10 flex items-center justify-between gap-3">
@@ -1050,6 +1105,7 @@
                             <input type="text" x-model="checkoutNotes" placeholder="Ej: Sin cebolla, cremas aparte, etc." class="w-full text-xs py-2.5 px-3 rounded-xl border border-bb-red/20 focus:border-bb-red outline-none bg-bb-cream font-semibold text-bb-dark">
                         </div>
 
+                        <!-- PASARELA DE PAGO SIN ACCESOS DIRECTOS ROTOS (Request 2) -->
                         <div class="space-y-3 bg-bb-cream p-3 sm:p-4 rounded-2xl border border-bb-red/10">
                             <h4 class="text-xs font-brand text-bb-red uppercase tracking-wider">Pasarela de Pago</h4>
                             <div class="bg-white p-3.5 rounded-xl border border-bb-red/10 flex items-center justify-between shadow-sm">
@@ -1060,24 +1116,17 @@
                                         <p class="text-[9px] sm:text-[10px] text-bb-shadow/80 font-bold">Joaquin Andre Sanchez More</p>
                                     </div>
                                 </div>
-                                <button @click="copyToClipboard('914440507')" class="px-3 py-1.5 bg-bb-red/10 text-bb-red font-extrabold text-[10px] rounded-lg hover:bg-bb-red hover:text-white transition">Copiar</button>
-                            </div>
-                            
-                            <div class="text-center pt-1">
-                                <a href="yape://" 
-                                   class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-[#742d8c] hover:bg-[#5c2470] text-white font-extrabold text-xs rounded-xl transition shadow-md">
-                                    <i class="fa-solid fa-mobile-screen-button"></i>
-                                    <span>⚡ Abrir App de Yape en mi celular</span>
-                                </a>
+                                <button @click="copyToClipboard('914440507')" class="px-3 py-1.5 bg-bb-red/10 text-bb-red font-extrabold text-[10px] rounded-lg hover:bg-bb-red hover:text-white transition">Copiar Número</button>
                             </div>
 
-                            <p class="text-[10px] text-bb-shadow/80 font-bold text-center leading-normal mt-2">
-                                Copia el número arriba o presiona el botón morado para yapear de inmediato. Al finalizar, envía el comprobante al WhatsApp para iniciar la preparación.
+                            <p class="text-[10px] text-bb-shadow/80 font-bold text-center leading-normal mt-1">
+                                Copia el número arriba, ingresa a tu aplicación de Yape para realizar el pago del total y envía el comprobante en tu chat de WhatsApp al finalizar.
                             </p>
                         </div>
                     </div>
                 </div>
 
+                <!-- Footer del Cajón Adaptativo -->
                 <div x-show="cart.length > 0" class="p-3.5 sm:p-5 border-t border-bb-cream bg-white space-y-2 sm:space-y-4 flex-shrink-0 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
                     
                     <div class="space-y-1 sm:space-y-1.5 text-xs font-bold text-bb-shadow/90" :class="currentStep === 'checkout' ? 'hidden sm:block' : ''">
@@ -1092,17 +1141,22 @@
                     </div>
 
                     <div>
+                        <!-- ACCIONES VISTA 1: CARRITO (VALIDA HORARIO ACTIVO - Request 1) -->
                         <div x-show="currentStep === 'cart'" class="space-y-3">
                             <div class="flex justify-between text-sm sm:text-base font-black text-bb-red pt-1 border-t border-bb-cream/60">
                                 <span>Total a pagar:</span>
                                 <span x-text="`S/ ${getCartTotal().toFixed(2)}`"></span>
                             </div>
-                            <button @click="goToCheckout()" 
-                                    class="w-full py-3 sm:py-4 bg-bb-red hover:bg-bb-red/90 text-white font-extrabold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 text-xs sm:text-sm uppercase tracking-wide">
-                                Proceder al pago <i class="fa-solid fa-arrow-right text-[10px] sm:text-xs"></i>
+                            <button :disabled="!isOpen" 
+                                    @click="goToCheckout()" 
+                                    :class="!isOpen ? 'bg-gray-400 cursor-not-allowed shadow-none' : 'bg-bb-red hover:bg-bb-red/90'"
+                                    class="w-full py-3 sm:py-4 text-white font-extrabold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 text-xs sm:text-sm uppercase tracking-wide">
+                                <span x-text="isOpen ? 'Proceder al pago' : 'Cocina Cerrada actualmente'"></span>
+                                <i x-show="isOpen" class="fa-solid fa-arrow-right text-[10px] sm:text-xs"></i>
                             </button>
                         </div>
 
+                        <!-- ACCIONES VISTA 2: CHECKOUT (VALIDA HORARIO ACTIVO - Request 1) -->
                         <div x-show="currentStep === 'checkout'" class="flex sm:flex-col justify-between items-center gap-3 pt-1 border-t border-bb-cream/60 sm:border-t-0">
                             <div class="flex flex-col text-left mr-auto sm:w-full sm:pb-2 sm:border-b sm:border-bb-cream/60">
                                 <span class="text-[8px] sm:text-[9px] text-gray-500 font-extrabold uppercase tracking-wider leading-none">Total a Pagar</span>
@@ -1112,12 +1166,12 @@
                             </div>
 
                             <button @click="sendToWhatsApp()" 
-                                    :disabled="checkoutDeliveryType === 'delivery' && isOutOfRange"
-                                    :class="(checkoutDeliveryType === 'delivery' && isOutOfRange) ? 'bg-gray-400 cursor-not-allowed shadow-none' : 'bg-[#25D366] hover:bg-[#128C7E]'"
+                                    :disabled="(checkoutDeliveryType === 'delivery' && isOutOfRange) || !isOpen"
+                                    :class="((checkoutDeliveryType === 'delivery' && isOutOfRange) || !isOpen) ? 'bg-gray-400 cursor-not-allowed shadow-none' : 'bg-[#25D366] hover:bg-[#128C7E]'"
                                     class="flex-1 sm:w-full py-2.5 sm:py-3.5 px-3 sm:px-4 text-white font-extrabold rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 text-xs sm:text-sm uppercase tracking-wide">
                                 <i class="fa-brands fa-whatsapp text-base sm:text-lg"></i>
-                                <span class="inline sm:hidden" x-text="isOutOfRange && checkoutDeliveryType === 'delivery' ? 'Bloqueado' : 'Confirmar'"></span>
-                                <span class="hidden sm:inline" x-text="isOutOfRange && checkoutDeliveryType === 'delivery' ? 'Ubicación fuera de rango' : 'Confirmar Pedido por WhatsApp'"></span>
+                                <span class="inline sm:hidden" x-text="!isOpen ? 'Cerrado' : (isOutOfRange && checkoutDeliveryType === 'delivery' ? 'Bloqueado' : 'Confirmar')"></span>
+                                <span class="hidden sm:inline" x-text="!isOpen ? 'Cocina Cerrada' : (isOutOfRange && checkoutDeliveryType === 'delivery' ? 'Ubicación fuera de rango' : 'Confirmar Pedido por WhatsApp')"></span>
                             </button>
                         </div>
                     </div>
@@ -1127,6 +1181,7 @@
         </div>
     </div>
 
+    <!-- NOTIFICACIONES TEMPORALES FLOTANTES -->
     <div x-show="floatingNotification" 
          class="fixed bottom-4 left-4 right-4 md:left-auto md:w-80 bg-bb-dark text-white p-4 rounded-xl shadow-2xl z-50 flex items-center justify-between border border-bb-yellow/20"
          style="display: none;"
@@ -1140,21 +1195,22 @@
         <button @click="floatingNotification = ''" class="text-bb-yellow font-black text-xs px-2">OK</button>
     </div>
 
+    <!-- BOTÓN FLOTANTE FIJO REDISEÑADO: MÁS PEQUEÑO Y MENOS INVASIVO (Request 3) -->
     <button @click="isCartOpen = true" 
             x-show="!isCartOpen" 
-            class="fixed bottom-6 right-6 z-40 bg-bb-red hover:bg-bb-red/90 text-white font-extrabold py-3.5 px-5 rounded-full shadow-2xl transition-all duration-300 transform hover:scale-105 flex items-center gap-2.5 border-2 border-bb-yellow"
+            class="fixed bottom-4 right-4 z-40 bg-bb-red hover:bg-bb-red/90 text-white font-bold py-2.5 px-4 rounded-full shadow-xl transition-all duration-300 transform hover:scale-103 flex items-center gap-2 border border-bb-yellow text-xs sm:text-sm"
             style="display: none;"
             x-transition:enter="transition ease-out duration-300"
             x-transition:enter-start="opacity-0 translate-y-10 scale-95"
             x-transition:enter-end="opacity-100 translate-y-0 scale-100">
         
         <span class="relative">
-            <i class="fa-solid fa-burger text-lg sm:text-xl text-bb-yellow"></i>
+            <i class="fa-solid fa-burger text-sm sm:text-base text-bb-yellow"></i>
             <span x-show="getCartItemsCount() > 0" 
-                  class="absolute -top-2.5 -right-2.5 bg-bb-yellow text-bb-dark font-black text-[9px] h-5 w-5 rounded-full flex items-center justify-center border border-bb-red animate-pulse"
+                  class="absolute -top-2.5 -right-2.5 bg-bb-yellow text-bb-dark font-black text-[8px] h-4 w-4 rounded-full flex items-center justify-center border border-bb-red animate-pulse"
                   x-text="getCartItemsCount()"></span>
         </span>
-        <span class="text-xs sm:text-sm tracking-wide uppercase">Abrir Pedido</span>
+        <span class="tracking-wide uppercase text-[10px] sm:text-xs">Ver Pedido</span>
     </button>
 
 </body>
