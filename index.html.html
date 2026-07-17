@@ -9,7 +9,7 @@
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Righteous&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght=300;400;500;600;700;800&family=Righteous&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -73,10 +73,11 @@
                 activeSchedule: 'SD', // Por defecto Sábados y Domingos. Se admite: SD, VSD, y TEST / TESTING / PRUEBAS / SIEMPRE
                 isOpen: false,
 
-                // Detalle del Producto Ampliado y Selector de cantidad previo
+                // Detalle del Producto Ampliado, selector de cantidad y cremas seleccionadas
                 isDetailOpen: false,
                 selectedProductForDetail: null,
                 modalQuantity: 1,
+                selectedCremas: [], // Guarda las cremas seleccionadas para el producto actual en el modal
                 
                 // Formulario de Checkout
                 checkoutName: '',
@@ -111,7 +112,7 @@
                     { id: 'hamburguesas', name: '🍔 Hamburguesas' },
                     { id: 'salchipapas', name: '🍟 Salchipapas' },
                     { id: 'bebidas', name: '🥤 Bebidas' },
-                    { id: 'cremas', name: '🍯 Cremas' },
+                    // Se remueve de la lista de categorías principales para que no aparezcan como productos separados[cite: 2]
                     { id: 'extras', name: '🥚 Extras' }
                 ],
 
@@ -154,7 +155,7 @@
                         name: 'Mayonesa de la Casa', 
                         description: 'Mayonesa premium hecha artesanalmente con toques de ajo y finas hierbas.', 
                         category: 'cremas', 
-                        price: 1.5,
+                        price: 0.0,
                         image: 'https://images.unsplash.com/photo-1571115177098-24ec4209b50e?auto=format&fit=crop&w=500&q=80'
                     },
                     { 
@@ -162,7 +163,7 @@
                         name: 'Ají de la Casa', 
                         description: 'Picante medio, elaborado con ají amarillo piurano y secretos del chef.', 
                         category: 'cremas', 
-                        price: 1.5,
+                        price: 0.0,
                         image: 'https://images.unsplash.com/photo-1584269600464-37b1b58a9fe7?auto=format&fit=crop&w=500&q=80'
                     },
                     { 
@@ -170,7 +171,7 @@
                         name: 'Salsa Tártara Artesanal', 
                         description: 'La clásica tártara perfecta para las papas crocantes.', 
                         category: 'cremas', 
-                        price: 1.5,
+                        price: 0.0,
                         image: 'https://images.unsplash.com/photo-1470001962233-0d2922790231?auto=format&fit=crop&w=500&q=80'
                     },
                     { 
@@ -193,9 +194,30 @@
                             this.checkoutDeliveryType = parsed.deliveryType || 'delivery';
                             this.checkoutAddress = parsed.address || '';
                             this.checkoutReference = parsed.reference || '';
-                            // Restaurar coordenadas GPS persistentes si existen
                             this.gpsCoords = parsed.gpsCoords || '';
                             this.saveUserData = true;
+
+                            // Sincronizar automáticamente GPS, distancia y envío con los datos guardados
+                            if (this.gpsCoords) {
+                                const parts = this.gpsCoords.split(',');
+                                if (parts.length === 2) {
+                                    const lat = parseFloat(parts[0]);
+                                    const lng = parseFloat(parts[1]);
+                                    if (!isNaN(lat) && !isNaN(lng)) {
+                                        const dist = this.calculateDistance(
+                                            this.restaurantCoords.lat, 
+                                            this.restaurantCoords.lng, 
+                                            lat, 
+                                            lng
+                                        );
+                                        this.deliveryDistance = dist;
+                                        this.updateDeliveryCost(dist);
+                                    }
+                                }
+                            } else if (this.checkoutAddress) {
+                                // Si hay una dirección escrita guardada pero no hay coordenadas GPS, buscar en el mapa silenciosamente
+                                this.geocodeAddressSilently();
+                            }
                         } catch (e) {
                             console.error("Error al cargar perfil guardado", e);
                         }
@@ -228,14 +250,11 @@
 
                     // VALIDACIÓN DE HORARIO DE TESTEO / PRUEBAS
                     if (['TEST', 'TESTING', 'PRUEBAS', 'SIEMPRE'].includes(activeUpper)) {
-                        // Modo testeo: siempre abierto las 24 horas del día
                         this.isOpen = true;
                     } else if (activeUpper === 'VSD') {
-                        // Viernes (5), Sábado (6) y Domingo (0)
                         const isDayValid = [0, 5, 6].includes(day);
                         this.isOpen = isDayValid && isTimeValid;
                     } else {
-                        // Solo Sábado (6) y Domingo (0)
                         const isDayValid = [0, 6].includes(day);
                         this.isOpen = isDayValid && isTimeValid;
                     }
@@ -253,19 +272,8 @@
                     return R * c;
                 },
 
-                onMarkerMove(lat, lng) {
-                    this.gpsCoords = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-                    
-                    const dist = this.calculateDistance(
-                        this.restaurantCoords.lat, 
-                        this.restaurantCoords.lng, 
-                        lat, 
-                        lng
-                    );
-                    
-                    this.deliveryDistance = dist;
-
-                    // Escala de precios por rangos de distancia:
+                // Actualiza dinámicamente la escala de precios según la distancia
+                updateDeliveryCost(dist) {
                     if (dist < 1.0) {
                         this.deliveryCost = 3.0; // Menor a 1km = S/ 3
                         this.isOutOfRange = false;
@@ -284,6 +292,18 @@
                     }
                 },
 
+                onMarkerMove(lat, lng) {
+                    this.gpsCoords = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                    const dist = this.calculateDistance(
+                        this.restaurantCoords.lat, 
+                        this.restaurantCoords.lng, 
+                        lat, 
+                        lng
+                    );
+                    this.deliveryDistance = dist;
+                    this.updateDeliveryCost(dist);
+                },
+
                 // OBTENER UBICACIÓN POR GPS NATIVO Y AUTOCOMPLETAR DIRECCIÓN
                 getCurrentLocationGPS() {
                     if (!navigator.geolocation) {
@@ -298,7 +318,6 @@
                             const lng = position.coords.longitude;
                             const accuracy = position.coords.accuracy;
 
-                            // Comprobar si es una PC con ubicación IP lejana (> 15 km del local) o imprecisa
                             const dist = this.calculateDistance(
                                 this.restaurantCoords.lat, 
                                 this.restaurantCoords.lng, 
@@ -307,7 +326,6 @@
                             );
 
                             if (dist > 15.0 || accuracy > 1000) {
-                                // Forzar coordenadas del local como punto de inicio seguro en Piura
                                 const fallbackLat = this.restaurantCoords.lat;
                                 const fallbackLng = this.restaurantCoords.lng;
                                 if (this.map) {
@@ -366,7 +384,7 @@
                     }
                 },
 
-                // BUSCAR DIRECCIÓN ESCRITA MANUALMENTE Y MOVER EL MAPA
+                // BUSCAR DIRECCIÓN ESCRITA MANUALMENTE Y MOVER EL MAPA (ACTUALIZANDO GPS)
                 async geocodeAddress() {
                     if (!this.checkoutAddress.trim()) {
                         this.triggerNotification("⚠️ Escribe una dirección para buscarla.");
@@ -383,6 +401,8 @@
                             if (data && data.length > 0) {
                                 const lat = parseFloat(data[0].lat);
                                 const lng = parseFloat(data[0].lon);
+                                
+                                this.gpsCoords = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
                                 
                                 if (this.map) {
                                     this.map.setView([lat, lng], 16);
@@ -402,7 +422,7 @@
                     }
                 },
 
-                // BUSCAR DIRECCIÓN DE FORMA SILENCIOSA (CON DEBOUNCE PARA CAMBIOS EN TIEMPO REAL DESDE LA CAJA DE TEXTO)
+                // SINCRO GPS SILENCIOSA (DEBOUNCE EN TIEMPO REAL DESDE LA CAJA DE TEXTO)
                 async geocodeAddressSilently() {
                     if (!this.checkoutAddress.trim() || this.checkoutAddress.length < 5) {
                         return;
@@ -418,10 +438,19 @@
                                 const lat = parseFloat(data[0].lat);
                                 const lng = parseFloat(data[0].lon);
                                 
+                                this.gpsCoords = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                                const dist = this.calculateDistance(
+                                    this.restaurantCoords.lat, 
+                                    this.restaurantCoords.lng, 
+                                    lat, 
+                                    lng
+                                );
+                                this.deliveryDistance = dist;
+                                this.updateDeliveryCost(dist);
+
                                 if (this.map && this.marker) {
                                     this.map.setView([lat, lng], 16);
                                     this.marker.setLatLng([lat, lng]);
-                                    this.onMarkerMove(lat, lng);
                                 }
                             }
                         }
@@ -463,7 +492,6 @@
                                 item[header] = val;
                             });
                             
-                            // Sincronización de Horario Activo desde Sheet (Soporta TEST, TESTING, PRUEBAS, SIEMPRE)
                             if (item.id === 'horario' || (item.categoria === 'config' && item.nombre === 'Horario Activo')) {
                                 if (item.estado) {
                                     const val = item.estado.toUpperCase().trim();
@@ -474,7 +502,6 @@
                                 continue;
                             }
                             
-                            // Logo dinámico
                             if (item.id === 'logo' || item.categoria === 'logo' || item.nombre?.toLowerCase().includes('logo')) {
                                 if (item.imagen_url) {
                                     fetchedLogo = item.imagen_url;
@@ -515,9 +542,15 @@
                     });
                 },
 
+                // Filtra las cremas que se obtienen de Google Sheets (no se muestran como producto individual)
+                getAvailableCremas() {
+                    return this.products.filter(p => p.category === 'cremas');
+                },
+
                 openProductDetail(product) {
                     this.selectedProductForDetail = product;
                     this.modalQuantity = 1; // Inicializar cantidad en 1 siempre
+                    this.selectedCremas = []; // Reiniciar la lista de cremas seleccionadas
                     this.isDetailOpen = true;
                 },
 
@@ -536,53 +569,44 @@
                     }
                     const amount = parseInt(qty) || 1;
 
-                    // CONTROL DE MÁXIMO 3 CREMAS POR PEDIDO
-                    if (product.category === 'cremas') {
-                        // Contar cuántas cremas de otros tipos ya están en el carrito
-                        const currentCremasInCart = this.cart.reduce((sum, item) => {
-                            if (item.id === product.id) return sum; // Ignorar el producto que se está editando ahora
-                            if (item.category === 'cremas') return sum + item.quantity;
-                            return sum;
-                        }, 0);
-
-                        // Encontrar cuántas porciones ya tiene en el carrito del producto actual
-                        const existingItem = this.cart.find(item => item.id === product.id);
-                        const existingQty = existingItem ? existingItem.quantity : 0;
-
-                        if (currentCremasInCart + existingQty + amount > 3) {
-                            this.triggerNotification("⚠️ Máximo 3 cremas en total por pedido. Ajusta tus porciones.");
-                            return;
+                    // Si el producto seleccionado pertenece a Hamburguesas o Salchipapas
+                    if (['hamburguesas', 'salchipapas'].includes(product.category)) {
+                        // Si se piden N productos, se agregan de forma INDIVIDUAL al carrito para personalizar sus cremas por separado
+                        for (let i = 0; i < amount; i++) {
+                            this.cart.push({
+                                // Generamos un ID único para evitar que se fusionen y poder listarlos de manera individual
+                                id: `${product.id}-${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
+                                productId: product.id,
+                                name: product.name,
+                                price: product.price,
+                                image: product.image,
+                                category: product.category,
+                                quantity: 1, // Cantidad fijada en 1 por elemento individual
+                                cremas: [...this.selectedCremas] // Clonamos la selección de cremas actual
+                            });
                         }
-                    }
-
-                    const existingItem = this.cart.find(item => item.id === product.id);
-                    if (existingItem) {
-                        existingItem.quantity += amount;
+                        this.triggerNotification(`🛒 Agregado: ${amount}x ${product.name} (con cremas personalizadas)`);
                     } else {
-                        this.cart.push({
-                            id: product.id,
-                            name: product.name,
-                            price: product.price,
-                            image: product.image,
-                            category: product.category,
-                            quantity: amount
-                        });
+                        // Otros tipos de producto como Bebidas o Extras se agrupan de forma normal
+                        const existingItem = this.cart.find(item => item.id === product.id);
+                        if (existingItem) {
+                            existingItem.quantity += amount;
+                        } else {
+                            this.cart.push({
+                                id: product.id,
+                                name: product.name,
+                                price: product.price,
+                                image: product.image,
+                                category: product.category,
+                                quantity: amount,
+                                cremas: []
+                            });
+                        }
+                        this.triggerNotification(`🛒 Agregado: ${amount}x ${product.name}`);
                     }
-                    this.triggerNotification(`🛒 Agregado: ${amount}x ${product.name}`);
                 },
 
                 increaseQty(item) {
-                    // Validar límite de cremas al presionar el botón "+" en el carrito
-                    if (item.category === 'cremas') {
-                        const currentCremasCount = this.cart.reduce((sum, i) => {
-                            if (i.category === 'cremas') return sum + i.quantity;
-                            return sum;
-                        }, 0);
-                        if (currentCremasCount + 1 > 3) {
-                            this.triggerNotification("⚠️ No se permiten más de 3 cremas en total por pedido.");
-                            return;
-                        }
-                    }
                     item.quantity++;
                 },
 
@@ -643,11 +667,9 @@
                     }
 
                     setTimeout(() => {
-                        // Coordenadas iniciales por defecto (Piura)
                         let defaultLat = -5.1764;
                         let defaultLng = -80.6406;
 
-                        // Intentar recuperar las coordenadas exactas de la última compra guardada
                         if (this.gpsCoords) {
                             const parts = this.gpsCoords.split(',');
                             if (parts.length === 2) {
@@ -678,20 +700,19 @@
                             icon: pinIcon
                         }).addTo(this.map);
 
-                        // Actualizar la distancia y costo del envío según la posición del marcador cargado
                         this.onMarkerMove(defaultLat, defaultLng);
 
                         this.marker.on('dragend', () => {
                             const pos = this.marker.getLatLng();
                             this.onMarkerMove(pos.lat, pos.lng);
-                            this.reverseGeocode(pos.lat, pos.lng); // Actualizar dirección al arrastrar pin
+                            this.reverseGeocode(pos.lat, pos.lng); 
                         });
 
                         this.map.on('click', (e) => {
                             const pos = e.latlng;
                             this.marker.setLatLng(pos);
                             this.onMarkerMove(pos.lat, pos.lng);
-                            this.reverseGeocode(pos.lat, pos.lng); // Actualizar dirección al hacer clic
+                            this.reverseGeocode(pos.lat, pos.lng); 
                         });
 
                     }, 250);
@@ -742,7 +763,6 @@
                         }
                     }
 
-                    // Validación de pago en Efectivo
                     if (this.checkoutPaymentMethod === 'cash') {
                         const amountToPayNum = parseFloat(this.cashAmountToPay);
                         const totalToPay = this.getCartTotalWithDelivery();
@@ -756,7 +776,6 @@
                         }
                     }
 
-                    // Guardar perfil del cliente persistente (incluyendo las coordenadas GPS)
                     if (this.saveUserData) {
                         const profile = {
                             name: this.checkoutName.trim(),
@@ -764,7 +783,7 @@
                             deliveryType: this.checkoutDeliveryType,
                             address: this.checkoutAddress.trim(),
                             reference: this.checkoutReference.trim(),
-                            gpsCoords: this.gpsCoords // Coordenadas persistentes guardadas para la próxima compra
+                            gpsCoords: this.gpsCoords 
                         };
                         localStorage.setItem('bigbite_saved_profile', JSON.stringify(profile));
                     } else {
@@ -793,7 +812,6 @@
                         msg += `📝 *Especificaciones:* ${this.checkoutNotes.trim()}\n`;
                     }
                     
-                    // Detallar método de pago en WhatsApp
                     if (this.checkoutPaymentMethod === 'yape') {
                         msg += `💵 *Método de Pago:* Yape (Joaquin Sanchez)\n\n`;
                     } else {
@@ -807,7 +825,12 @@
                     msg += `📋 *PRODUCTOS PEDIDOS:* \n`;
                     
                     this.cart.forEach(item => {
-                        msg += `• ${item.quantity}x _${item.name}_ | S/ ${(item.price * item.quantity).toFixed(2)}\n`;
+                        msg += `• ${item.quantity}x _${item.name}_`;
+                        // Detallar cremas individuales de cada producto en WhatsApp
+                        if (item.cremas && item.cremas.length > 0) {
+                            msg += ` (Cremas: ${item.cremas.join(', ')})`;
+                        }
+                        msg += ` | S/ ${(item.price * item.quantity).toFixed(2)}\n`;
                     });
 
                     const subtotal = this.getCartTotal();
@@ -969,7 +992,6 @@
                     <div x-show="shouldShowCategory(cat.id)" class="space-y-4" :id="`sec-${cat.id}`">
                         <h3 class="font-brand text-xl md:text-2xl text-bb-red border-b-2 border-bb-yellow pb-2 flex justify-between items-center">
                             <span x-text="cat.name"></span>
-                            <span x-show="cat.id === 'cremas'" class="text-[10px] font-extrabold uppercase bg-bb-yellow/20 text-bb-yellow px-2.5 py-1 rounded-lg">Máximo 3 por pedido</span>
                         </h3>
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1009,7 +1031,7 @@
         </div>
     </main>
 
-    <!-- MODAL DE DETALLE DE PRODUCTO CON SELECTOR DE CANTIDAD PREVIO -->
+    <!-- MODAL DE DETALLE DE PRODUCTO CON SELECTOR DE CANTIDAD Y CREMAS DINÁMICAS -->
     <div x-show="isDetailOpen" 
          class="fixed inset-0 z-50 overflow-hidden flex items-center justify-center p-4 sm:p-6" 
          style="display: none;"
@@ -1036,7 +1058,7 @@
                 <i class="fa-solid fa-xmark text-lg"></i>
             </button>
 
-            <div class="h-60 sm:h-80 w-full relative overflow-hidden bg-bb-cream">
+            <div class="h-44 sm:h-56 w-full relative overflow-hidden bg-bb-cream flex-shrink-0">
                 <img :src="selectedProductForDetail?.image || 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=500&q=80'" 
                      :alt="selectedProductForDetail?.name" 
                      class="w-full h-full object-cover"
@@ -1044,23 +1066,37 @@
                 
                 <div class="absolute bottom-4 left-4">
                     <span class="bg-bb-red text-white text-[10px] font-extrabold uppercase tracking-widest px-3.5 py-1.5 rounded-full shadow-md border-2 border-bb-yellow"
-                          x-text="selectedProductForDetail ? categories.find(c => c.id === selectedProductForDetail.category)?.name : ''">
+                          x-text="selectedProductForDetail ? (categories.find(c => c.id === selectedProductForDetail.category)?.name || '🍴 Menú') : ''">
                     </span>
                 </div>
             </div>
 
-            <div class="p-6 space-y-4 flex-1 overflow-y-auto">
-                <h3 class="font-brand text-2xl text-bb-dark tracking-wide" x-text="selectedProductForDetail?.name"></h3>
+            <div class="p-5 space-y-4 flex-1 overflow-y-auto">
+                <h3 class="font-brand text-xl sm:text-2xl text-bb-dark tracking-wide" x-text="selectedProductForDetail?.name"></h3>
                 <p class="text-xs sm:text-sm text-bb-shadow/80 font-semibold leading-relaxed" x-text="selectedProductForDetail?.description"></p>
                 
-                <!-- Alerta dinámica de Cremas -->
-                <div x-show="selectedProductForDetail?.category === 'cremas'" class="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs font-semibold">
-                    <i class="fa-solid fa-circle-info mr-1"></i> Recuerda que puedes seleccionar hasta un máximo de 3 cremas en total para todo tu pedido.
+                <!-- LISTA DE CREMAS DINÁMICA (SOLO HAMBURGUESAS Y SALCHIPAPAS) -->
+                <div x-show="['hamburguesas', 'salchipapas'].includes(selectedProductForDetail?.category)" class="space-y-2 pt-1">
+                    <p class="text-xs font-bold text-bb-dark flex items-center gap-1.5">
+                        <i class="fa-solid fa-mortar-pestle text-bb-red"></i>
+                        <span>Elige las cremas para este producto (máx. 1 de cada una):</span>
+                    </p>
+                    <div class="grid grid-cols-2 gap-2 bg-bb-cream p-3 rounded-xl border border-bb-red/10 max-h-40 overflow-y-auto no-scrollbar">
+                        <template x-for="crema in getAvailableCremas()" :key="crema.id">
+                            <label class="flex items-center gap-2 p-2 bg-white rounded-lg border border-bb-red/10 cursor-pointer hover:border-bb-yellow transition shadow-xs">
+                                <input type="checkbox" 
+                                       :value="crema.name" 
+                                       x-model="selectedCremas" 
+                                       class="rounded text-bb-red focus:ring-bb-red h-4 w-4">
+                                <span class="text-[10px] sm:text-[11px] font-bold text-bb-dark leading-tight" x-text="crema.name"></span>
+                            </label>
+                        </template>
+                    </div>
                 </div>
 
-                <!-- CONTROL INTERACTIVO DE CANTIDAD ANTES DE CONFIRMAR -->
+                <!-- CONTROL INTERACTIVO DE CANTIDAD -->
                 <div class="flex items-center justify-between bg-bb-cream p-3 rounded-xl border border-bb-red/10">
-                    <span class="text-xs font-bold text-bb-dark" x-text="selectedProductForDetail?.category === 'cremas' ? 'Porciones de esta crema' : '¿Cuántas porciones brutales deseas?'"></span>
+                    <span class="text-xs font-bold text-bb-dark">¿Cuántas porciones brutales deseas?</span>
                     <div class="flex items-center gap-3 bg-white border border-bb-red/20 rounded-xl px-2.5 py-1">
                         <button type="button" @click="if(modalQuantity > 1) modalQuantity--" class="text-bb-red hover:text-bb-dark font-black px-1 text-sm"><i class="fa-solid fa-minus"></i></button>
                         <span class="text-sm font-black text-bb-dark min-w-[20px] text-center" x-text="modalQuantity"></span>
@@ -1068,7 +1104,7 @@
                     </div>
                 </div>
 
-                <div class="flex items-center justify-between pt-4 border-t border-bb-cream">
+                <div class="flex items-center justify-between pt-4 border-t border-bb-cream flex-shrink-0">
                     <div>
                         <span class="text-[10px] text-gray-400 font-extrabold uppercase tracking-wider block">Precio Unitario</span>
                         <span class="font-black text-xl text-bb-red" x-text="`S/ ${selectedProductForDetail?.price.toFixed(2)}`"></span>
@@ -1132,13 +1168,6 @@
                             <p class="text-rose-950/80 mt-0.5">Lo sentimos, nos encontramos fuera de nuestro horario de reparto. No es posible tramitar la compra hasta la apertura.</p>
                         </div>
 
-                        <!-- Indicador de total de cremas en el carrito -->
-                        <div x-show="cart.some(i => i.category === 'cremas')" class="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs text-amber-800 font-semibold">
-                            <span><i class="fa-solid fa-bowl-rice mr-1.5"></i> Cremas agregadas en total:</span>
-                            <span class="font-bold text-sm bg-white border border-amber-300 px-2 py-0.5 rounded-lg" 
-                                  x-text="`${cart.reduce((sum, item) => item.category === 'cremas' ? sum + item.quantity : sum, 0)} / 3`"></span>
-                        </div>
-
                         <div x-show="cart.length === 0" class="text-center py-12 space-y-3">
                             <i class="fa-solid fa-cookie-bite text-5xl text-bb-yellow/40 animate-pulse"></i>
                             <p class="text-xs font-bold text-bb-shadow/80">¿Aún no has agregado ninguna hamburguesa brutal?</p>
@@ -1155,6 +1184,14 @@
 
                                     <div class="flex-1">
                                         <h4 class="font-bold text-xs md:text-sm text-bb-dark" x-text="item.name"></h4>
+                                        <!-- LISTADO DE CREMAS SELECCIONADAS DEBAJO DEL NOMBRE -->
+                                        <template x-if="item.cremas && item.cremas.length > 0">
+                                            <div class="flex flex-wrap gap-1 mt-1">
+                                                <span class="text-[9px] bg-[#742d8c]/10 text-[#742d8c] font-black px-1.5 py-0.5 rounded-sm">
+                                                    Cremas: <span x-text="item.cremas.join(', ')"></span>
+                                                </span>
+                                            </div>
+                                        </template>
                                         <p class="text-[11px] font-extrabold text-bb-shadow/70 mt-0.5" x-text="`S/ ${item.price.toFixed(2)} c/u`"></p>
                                     </div>
 
@@ -1223,6 +1260,7 @@
                                 <div>
                                     <label class="block text-[11px] font-extrabold text-bb-dark mb-1">Dirección exacta *</label>
                                     <div class="flex gap-2">
+                                        <!-- Entrada de dirección con auto-búsqueda GPS silenciosa en tiempo real al escribir (Debounce) -->
                                         <input type="text" 
                                                x-model="checkoutAddress" 
                                                x-on:input.debounce.800ms="geocodeAddressSilently()"
@@ -1290,11 +1328,10 @@
                             <input type="text" x-model="checkoutNotes" placeholder="Ej: Sin cebolla, cremas aparte, etc." class="w-full text-xs py-2.5 px-3 rounded-xl border border-bb-red/20 focus:border-bb-red outline-none bg-bb-cream font-semibold text-bb-dark">
                         </div>
 
-                        <!-- PASARELA DE PAGO / METODOS DE PAGO ADAPTADOS DE LA IMAGEN (image_1fc8a4.png) -->
+                        <!-- PASARELA DE PAGO / METODOS DE PAGO ADAPTADOS -->
                         <div class="space-y-4 bg-bb-cream p-4 rounded-3xl border border-bb-red/10 shadow-xs text-left">
                             <h4 class="text-xs font-brand text-bb-red uppercase tracking-wider">Método de Pago</h4>
                             
-                            <!-- Botones de selección de método (Pestañas horizontales estilo pill) -->
                             <div class="grid grid-cols-2 gap-3 bg-white p-1.5 rounded-full border border-bb-red/10">
                                 <!-- Yape Tab -->
                                 <button type="button" 
@@ -1315,7 +1352,7 @@
                                 </button>
                             </div>
 
-                            <!-- Panel informativo de Yape (morado con botón cyan para copiar) -->
+                            <!-- Panel informativo de Yape -->
                             <div x-show="checkoutPaymentMethod === 'yape'" 
                                  class="bg-[#742d8c] text-white p-4 rounded-2xl border border-[#5a1b70] space-y-3 shadow-md"
                                  x-transition:enter="transition ease-out duration-200"
@@ -1337,7 +1374,7 @@
                                 </div>
                             </div>
 
-                            <!-- Panel interactivo de Efectivo (con selector de cantidad con la que pagará) -->
+                            <!-- Panel interactivo de Efectivo -->
                             <div x-show="checkoutPaymentMethod === 'cash'" 
                                  class="bg-white p-4 rounded-2xl border border-bb-red/10 space-y-3 shadow-xs"
                                  x-transition:enter="transition ease-out duration-200"
@@ -1373,7 +1410,6 @@
                                 </div>
                             </div>
 
-                            <!-- Nota informativa según selección -->
                             <p x-show="checkoutPaymentMethod === 'yape'" class="text-[10px] text-bb-shadow/80 font-bold text-center leading-normal mt-1">
                                 Copia el número arriba, ingresa a tu Yape para realizar el pago del total y envía el comprobante en tu chat de WhatsApp al finalizar.
                             </p>
@@ -1399,7 +1435,7 @@
                     </div>
 
                     <div>
-                        <!-- ACCIONES VISTA 1: CARRITO (VALIDA HORARIO ACTIVO) -->
+                        <!-- ACCIONES VISTA 1: CARRITO -->
                         <div x-show="currentStep === 'cart'" class="space-y-3">
                             <div class="flex justify-between text-sm sm:text-base font-black text-bb-red pt-1 border-t border-bb-cream/60">
                                 <span>Total a pagar:</span>
@@ -1414,7 +1450,7 @@
                             </button>
                         </div>
 
-                        <!-- ACCIONES VISTA 2: CHECKOUT (VALIDA HORARIO ACTIVO) -->
+                        <!-- ACCIONES VISTA 2: CHECKOUT -->
                         <div x-show="currentStep === 'checkout'" class="flex sm:flex-col justify-between items-center gap-3 pt-1 border-t border-bb-cream/60 sm:border-t-0">
                             <div class="flex flex-col text-left mr-auto sm:w-full sm:pb-2 sm:border-b sm:border-bb-cream/60">
                                 <span class="text-[8px] sm:text-[9px] text-gray-500 font-extrabold uppercase tracking-wider leading-none">Total a Pagar</span>
@@ -1453,7 +1489,7 @@
         <button @click="floatingNotification = ''" class="text-bb-yellow font-black text-xs px-2">OK</button>
     </div>
 
-    <!-- BOTÓN FLOTANTE FIJO REDISEÑADO: MÁS PEQUEÑO Y MENOS INVASIVO -->
+    <!-- BOTÓN FLOTANTE FIJO REDISEÑADO -->
     <button @click="isCartOpen = true" 
             x-show="!isCartOpen" 
             class="fixed bottom-4 right-4 z-40 bg-bb-red hover:bg-bb-red/90 text-white font-bold py-2.5 px-4 rounded-full shadow-xl transition-all duration-300 transform hover:scale-103 flex items-center gap-2 border border-bb-yellow text-xs sm:text-sm"
