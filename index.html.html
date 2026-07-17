@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BIG BITE — Burgers & Salchipapas</title>
+    <title>BIG BITE — El tamaño SÍ importa</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -193,6 +193,8 @@
                             this.checkoutDeliveryType = parsed.deliveryType || 'delivery';
                             this.checkoutAddress = parsed.address || '';
                             this.checkoutReference = parsed.reference || '';
+                            // Restaurar coordenadas GPS persistentes si existen
+                            this.gpsCoords = parsed.gpsCoords || '';
                             this.saveUserData = true;
                         } catch (e) {
                             console.error("Error al cargar perfil guardado", e);
@@ -251,7 +253,6 @@
                     return R * c;
                 },
 
-                // ACTUALIZAR DISTANCIA Y COTIZACIÓN DE DELIVERY
                 onMarkerMove(lat, lng) {
                     this.gpsCoords = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
                     
@@ -642,8 +643,22 @@
                     }
 
                     setTimeout(() => {
-                        const defaultLat = -5.1764;
-                        const defaultLng = -80.6406;
+                        // Coordenadas iniciales por defecto (Piura)
+                        let defaultLat = -5.1764;
+                        let defaultLng = -80.6406;
+
+                        // Intentar recuperar las coordenadas exactas de la última compra guardada
+                        if (this.gpsCoords) {
+                            const parts = this.gpsCoords.split(',');
+                            if (parts.length === 2) {
+                                const parsedLat = parseFloat(parts[0]);
+                                const parsedLng = parseFloat(parts[1]);
+                                if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
+                                    defaultLat = parsedLat;
+                                    defaultLng = parsedLng;
+                                }
+                            }
+                        }
 
                         this.map = L.map('map').setView([defaultLat, defaultLng], 15);
                         
@@ -663,6 +678,7 @@
                             icon: pinIcon
                         }).addTo(this.map);
 
+                        // Actualizar la distancia y costo del envío según la posición del marcador cargado
                         this.onMarkerMove(defaultLat, defaultLng);
 
                         this.marker.on('dragend', () => {
@@ -740,13 +756,15 @@
                         }
                     }
 
+                    // Guardar perfil del cliente persistente (incluyendo las coordenadas GPS)
                     if (this.saveUserData) {
                         const profile = {
                             name: this.checkoutName.trim(),
                             phone: this.checkoutPhone.trim(),
                             deliveryType: this.checkoutDeliveryType,
                             address: this.checkoutAddress.trim(),
-                            reference: this.checkoutReference.trim()
+                            reference: this.checkoutReference.trim(),
+                            gpsCoords: this.gpsCoords // Coordenadas persistentes guardadas para la próxima compra
                         };
                         localStorage.setItem('bigbite_saved_profile', JSON.stringify(profile));
                     } else {
@@ -835,7 +853,7 @@
                 </div>
                 <div>
                     <h1 class="font-brand text-2xl md:text-3xl tracking-wide text-bb-red leading-none">BIG BITE</h1>
-                    <p class="text-[9px] md:text-xs font-extrabold tracking-widest text-bb-yellow uppercase mt-0.5">Burgers & Salchipapas</p>
+                    <p class="text-[9px] md:text-xs font-extrabold tracking-widest text-bb-yellow uppercase mt-0.5">El tamaño SÍ importa</p>
                 </div>
             </div>
 
