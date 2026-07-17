@@ -87,6 +87,10 @@
                 checkoutNotes: '',
                 gpsCoords: '',
                 
+                // Métodos de Pago
+                checkoutPaymentMethod: 'yape', // 'yape' o 'cash'
+                cashAmountToPay: '', // Monto ingresado con el que pagará
+
                 // Sistema de Cotización por Distancia GPS
                 deliveryDistance: 0,
                 deliveryCost: 0,
@@ -722,6 +726,20 @@
                         }
                     }
 
+                    // Validación de pago en Efectivo
+                    if (this.checkoutPaymentMethod === 'cash') {
+                        const amountToPayNum = parseFloat(this.cashAmountToPay);
+                        const totalToPay = this.getCartTotalWithDelivery();
+                        if (!this.cashAmountToPay || isNaN(amountToPayNum)) {
+                            this.errorMessage = "Por favor, ingresa con cuánto vas a pagar en efectivo.";
+                            return;
+                        }
+                        if (amountToPayNum < totalToPay) {
+                            this.errorMessage = `El monto de pago (S/ ${amountToPayNum.toFixed(2)}) debe ser igual o mayor al total (S/ ${totalToPay.toFixed(2)}).`;
+                            return;
+                        }
+                    }
+
                     if (this.saveUserData) {
                         const profile = {
                             name: this.checkoutName.trim(),
@@ -757,7 +775,17 @@
                         msg += `📝 *Especificaciones:* ${this.checkoutNotes.trim()}\n`;
                     }
                     
-                    msg += `💵 *Método de Pago:* Yape (Joaquin Sanchez)\n\n`;
+                    // Detallar método de pago en WhatsApp
+                    if (this.checkoutPaymentMethod === 'yape') {
+                        msg += `💵 *Método de Pago:* Yape (Joaquin Sanchez)\n\n`;
+                    } else {
+                        const totalToPay = this.getCartTotalWithDelivery();
+                        const change = parseFloat(this.cashAmountToPay) - totalToPay;
+                        msg += `💵 *Método de Pago:* Efectivo\n`;
+                        msg += `💰 *Paga con:* S/ ${parseFloat(this.cashAmountToPay).toFixed(2)}\n`;
+                        msg += `🪙 *Vuelto requerido:* S/ ${change.toFixed(2)}\n\n`;
+                    }
+                    
                     msg += `📋 *PRODUCTOS PEDIDOS:* \n`;
                     
                     this.cart.forEach(item => {
@@ -773,7 +801,12 @@
                         msg += `🚚 *Envío:* S/ ${delivery.toFixed(2)}\n`;
                     }
                     msg += `💰 *TOTAL GENERAL: S/ ${total.toFixed(2)}*\n\n`;
-                    msg += `⚡ _Por favor indícame si el Yape ya fue enviado para iniciar la preparación._`;
+                    
+                    if (this.checkoutPaymentMethod === 'yape') {
+                        msg += `⚡ _Por favor indícame si el Yape ya fue enviado para iniciar la preparación._`;
+                    } else {
+                        msg += `⚡ _Por favor confírmame el pedido para iniciar la preparación inmediata._`;
+                    }
 
                     const url = `https://api.whatsapp.com/send?phone=${businessPhone}&text=${encodeURIComponent(msg)}`;
                     window.open(url, '_blank');
@@ -1239,22 +1272,95 @@
                             <input type="text" x-model="checkoutNotes" placeholder="Ej: Sin cebolla, cremas aparte, etc." class="w-full text-xs py-2.5 px-3 rounded-xl border border-bb-red/20 focus:border-bb-red outline-none bg-bb-cream font-semibold text-bb-dark">
                         </div>
 
-                        <!-- PASARELA DE PAGO -->
-                        <div class="space-y-3 bg-bb-cream p-3 sm:p-4 rounded-2xl border border-bb-red/10">
-                            <h4 class="text-xs font-brand text-bb-red uppercase tracking-wider">Pasarela de Pago</h4>
-                            <div class="bg-white p-3.5 rounded-xl border border-bb-red/10 flex items-center justify-between shadow-sm">
-                                <div class="flex items-center gap-2.5">
-                                    <div class="bg-[#742d8c] text-white font-extrabold text-[9px] px-1.5 py-0.5 rounded-md">YAPE</div>
-                                    <div class="text-[11px] text-bb-dark">
-                                        <p class="font-extrabold text-xs">914 440 507</p>
-                                        <p class="text-[9px] sm:text-[10px] text-bb-shadow/80 font-bold">Joaquin Andre Sanchez More</p>
-                                    </div>
-                                </div>
-                                <button @click="copyToClipboard('914440507')" class="px-3 py-1.5 bg-bb-red/10 text-bb-red font-extrabold text-[10px] rounded-lg hover:bg-bb-red hover:text-white transition">Copiar Número</button>
+                        <!-- PASARELA DE PAGO / METODOS DE PAGO ADAPTADOS DE LA IMAGEN (image_1fc8a4.png) -->
+                        <div class="space-y-4 bg-bb-cream p-4 rounded-3xl border border-bb-red/10 shadow-xs text-left">
+                            <h4 class="text-xs font-brand text-bb-red uppercase tracking-wider">Método de Pago</h4>
+                            
+                            <!-- Botones de selección de método (Pestañas horizontales estilo pill) -->
+                            <div class="grid grid-cols-2 gap-3 bg-white p-1.5 rounded-full border border-bb-red/10">
+                                <!-- Yape Tab -->
+                                <button type="button" 
+                                        @click="checkoutPaymentMethod = 'yape'"
+                                        :class="checkoutPaymentMethod === 'yape' ? 'bg-[#742d8c] text-white' : 'bg-transparent text-bb-dark/70 hover:text-bb-dark'"
+                                        class="py-2.5 px-4 rounded-full text-xs font-black transition-all duration-200 flex items-center justify-center gap-2">
+                                    <span x-show="checkoutPaymentMethod === 'yape'" class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                                    <span>📱 Yape</span>
+                                </button>
+                                
+                                <!-- Efectivo Tab -->
+                                <button type="button" 
+                                        @click="checkoutPaymentMethod = 'cash'"
+                                        :class="checkoutPaymentMethod === 'cash' ? 'bg-[#15803d] text-white' : 'bg-transparent text-bb-dark/70 hover:text-bb-dark'"
+                                        class="py-2.5 px-4 rounded-full text-xs font-black transition-all duration-200 flex items-center justify-center gap-2">
+                                    <span x-show="checkoutPaymentMethod === 'cash'" class="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></span>
+                                    <span>💵 Efectivo</span>
+                                </button>
                             </div>
 
-                            <p class="text-[10px] text-bb-shadow/80 font-bold text-center leading-normal mt-1">
-                                Copia el número arriba, ingresa a tu aplicación de Yape para realizar el pago del total y envía el comprobante en tu chat de WhatsApp al finalizar.
+                            <!-- Panel informativo de Yape (morado con botón cyan para copiar) -->
+                            <div x-show="checkoutPaymentMethod === 'yape'" 
+                                 class="bg-[#742d8c] text-white p-4 rounded-2xl border border-[#5a1b70] space-y-3 shadow-md"
+                                 x-transition:enter="transition ease-out duration-200"
+                                 x-transition:enter-start="opacity-0 scale-95"
+                                 x-transition:enter-end="opacity-100 scale-100">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="flex items-center gap-3">
+                                        <div class="bg-cyan-400 text-[#742d8c] font-black text-[9px] px-2 py-1 rounded-md shadow-xs">YAPE</div>
+                                        <div class="text-left">
+                                            <p class="font-extrabold text-sm sm:text-base tracking-wider">914 440 507</p>
+                                            <p class="text-[9px] sm:text-[10px] text-white/95 font-bold leading-none mt-1">Joaquin Andre Sanchez More</p>
+                                        </div>
+                                    </div>
+                                    <button type="button" 
+                                            @click="copyToClipboard('914440507')" 
+                                            class="px-3.5 py-2 bg-cyan-400 hover:bg-cyan-300 text-[#742d8c] font-black text-[10px] rounded-xl transition shadow-xs active:scale-95">
+                                        Copiar
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Panel interactivo de Efectivo (con selector de cantidad con la que pagará) -->
+                            <div x-show="checkoutPaymentMethod === 'cash'" 
+                                 class="bg-white p-4 rounded-2xl border border-bb-red/10 space-y-3 shadow-xs"
+                                 x-transition:enter="transition ease-out duration-200"
+                                 x-transition:enter-start="opacity-0 scale-95"
+                                 x-transition:enter-end="opacity-100 scale-100">
+                                <div class="space-y-2 text-left">
+                                    <label class="block text-[11px] font-extrabold text-bb-dark">¿Con cuánto vas a pagar? *</label>
+                                    <div class="relative rounded-xl shadow-xs">
+                                        <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                            <span class="text-xs font-black text-bb-red">S/</span>
+                                        </div>
+                                        <input type="number" 
+                                               step="0.10" 
+                                               x-model="cashAmountToPay" 
+                                               :placeholder="`Ej: S/ ${(getCartTotalWithDelivery() + 10).toFixed(2)}`" 
+                                               class="w-full text-xs py-2.5 pl-8 pr-3 rounded-xl border border-bb-red/20 focus:border-[#15803d] focus:ring-1 focus:ring-[#15803d] outline-none bg-bb-cream font-bold text-bb-dark">
+                                    </div>
+                                    
+                                    <!-- Calculadora dinámica de vuelto -->
+                                    <div class="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-left" x-show="Number(cashAmountToPay) > 0">
+                                        <template x-if="Number(cashAmountToPay) >= getCartTotalWithDelivery()">
+                                            <p class="text-emerald-800 font-semibold flex justify-between items-center">
+                                                <span>💵 Tu vuelto será de:</span>
+                                                <span class="font-black text-sm" x-text="`S/ ${(Number(cashAmountToPay) - getCartTotalWithDelivery()).toFixed(2)}`"></span>
+                                            </p>
+                                        </template>
+                                        <template x-if="Number(cashAmountToPay) < getCartTotalWithDelivery()">
+                                            <p class="text-rose-600 font-extrabold">
+                                                ⚠️ El monto debe ser igual o mayor al total (S/ <span x-text="getCartTotalWithDelivery().toFixed(2)"></span>).
+                                            </p>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Nota informativa según selección -->
+                            <p x-show="checkoutPaymentMethod === 'yape'" class="text-[10px] text-bb-shadow/80 font-bold text-center leading-normal mt-1">
+                                Copia el número arriba, ingresa a tu Yape para realizar el pago del total y envía el comprobante en tu chat de WhatsApp al finalizar.
+                            </p>
+                            <p x-show="checkoutPaymentMethod === 'cash'" class="text-[10px] text-bb-shadow/80 font-bold text-center leading-normal mt-1">
+                                Por favor, procura tener el dinero listo al recibir tu pedido para agilizar la entrega en casa.
                             </p>
                         </div>
                     </div>
