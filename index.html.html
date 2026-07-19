@@ -5,14 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BIG BITE — El tamaño SÍ importa</title>
     
+    <!-- Cargando Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
+    <!-- Importando fuentes de Google -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Righteous&display=swap" rel="stylesheet">
     
+    <!-- Iconos FontAwesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
+    <!-- Mapas Interactivos Leaflet -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
@@ -70,14 +74,14 @@
                 isLoadingMenu: true,
                 
                 // Configuración de Horario Activo y Estado Abierto/Cerrado
-                activeSchedule: 'SD', // Por defecto Sábados y Domingos. Se admite: SD, VSD, y TEST / TESTING / PRUEBAS / SIEMPRE
+                activeSchedule: 'SD', // Por defecto Sábados y Domingos. Se admite: SD, VSD, y TEST / PRUEBAS / SIEMPRE
                 isOpen: false,
 
                 // Detalle del Producto Ampliado y Selector de cantidad previo
                 isDetailOpen: false,
                 selectedProductForDetail: null,
                 modalQuantity: 1,
-                detailCreamsSelections: [ [] ], // Guarda la selección de cremas individual por cada unidad pedida
+                detailCreamsSelections: [ [] ], // Guarda la selección de cremas por unidad pedida
 
                 // Formulario de Checkout
                 checkoutName: '',
@@ -90,13 +94,13 @@
                 
                 // Métodos de Pago
                 checkoutPaymentMethod: 'yape', // 'yape' o 'cash'
-                cashAmountToPay: '', // Monto ingresado con el que pagará
+                cashAmountToPay: '', // Monto con el que pagará
 
                 // Sistema de Cotización por Distancia GPS
                 deliveryDistance: 0,
                 deliveryCost: 0,
                 isOutOfRange: false,
-                restaurantCoords: { lat: -5.16908597946167, lng: -80.6329345703125 }, // Santa María del Pinar
+                restaurantCoords: { lat: -5.169083, lng: -80.632944 }, // Coordenadas correspondientes a 5°10'08.7"S 80°37'58.6"W
 
                 // Sistema de guardado de datos (LocalStorage)
                 saveUserData: false,
@@ -115,7 +119,6 @@
                     { id: 'extras', name: '🥚 Extras' }
                 ],
 
-                // Lista de productos fallback en Piura (las cremas ya no se listan aquí directamente al usuario)
                 products: [
                     { 
                         id: 'peque', 
@@ -238,7 +241,7 @@
                     const peruString = now.toLocaleString("en-US", { timeZone: "America/Lima" });
                     const peruDate = new Date(peruString);
                     
-                    const day = peruDate.getDay(); // 0: Domingo, 1: Lunes, ..., 5: Viernes, 6: Sábado
+                    const day = peruDate.getDay(); 
                     const hours = peruDate.getHours();
                     const minutes = peruDate.getMinutes();
                     const currentTimeInMinutes = hours * 60 + minutes;
@@ -247,25 +250,19 @@
                     const closingTime = 23 * 60;      // 11:00 PM
 
                     const isTimeValid = currentTimeInMinutes >= openingTime && currentTimeInMinutes < closingTime;
-
                     const activeUpper = this.activeSchedule ? this.activeSchedule.toUpperCase().trim() : '';
 
-                    // VALIDACIÓN DE HORARIO DE TESTEO / PRUEBAS
                     if (['TEST', 'TESTING', 'PRUEBAS', 'SIEMPRE'].includes(activeUpper)) {
-                        // Modo testeo: siempre abierto las 24 horas del día
-                        this.isOpen = true;
+                        this.isOpen = true; // Abierto 24h para modo testeo
                     } else if (activeUpper === 'VSD') {
-                        // Viernes (5), Sábado (6) y Domingo (0)
                         const isDayValid = [0, 5, 6].includes(day);
                         this.isOpen = isDayValid && isTimeValid;
                     } else {
-                        // Solo Sábado (6) y Domingo (0)
                         const isDayValid = [0, 6].includes(day);
                         this.isOpen = isDayValid && isTimeValid;
                     }
                 },
 
-                // CÁLCULO DE DISTANCIA MATEMÁTICA (FÓRMULA DE HAVERSINE)
                 calculateDistance(lat1, lon1, lat2, lon2) {
                     const R = 6371; // Radio de la Tierra en km
                     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -292,7 +289,6 @@
                 },
 
                 updateDeliveryCost(dist) {
-                    // Escala de precios por rangos de distancia:
                     if (dist < 1.0) {
                         this.deliveryCost = 3.0; // Menor a 1km = S/ 3
                         this.isOutOfRange = false;
@@ -307,11 +303,10 @@
                         this.isOutOfRange = false;
                     } else {
                         this.deliveryCost = 0;
-                        this.isOutOfRange = true; // Más de 9km = Fuera de cobertura
+                        this.isOutOfRange = true; // Fuera de rango (> 9km)
                     }
                 },
 
-                // OBTENER UBICACIÓN POR GPS NATIVO Y AUTOCOMPLETAR DIRECCIÓN
                 getCurrentLocationGPS() {
                     if (!navigator.geolocation) {
                         this.triggerNotification("❌ Tu navegador no soporta geolocalización.");
@@ -325,7 +320,6 @@
                             const lng = position.coords.longitude;
                             const accuracy = position.coords.accuracy;
 
-                            // Comprobar si es una PC con ubicación IP lejana (> 15 km del local) o imprecisa
                             const dist = this.calculateDistance(
                                 this.restaurantCoords.lat, 
                                 this.restaurantCoords.lng, 
@@ -334,7 +328,6 @@
                             );
 
                             if (dist > 15.0 || accuracy > 1000) {
-                                // Forzar coordenadas del local como punto de inicio seguro en Piura
                                 const fallbackLat = this.restaurantCoords.lat;
                                 const fallbackLng = this.restaurantCoords.lng;
                                 if (this.map) {
@@ -345,7 +338,7 @@
                                 }
                                 this.onMarkerMove(fallbackLat, fallbackLng);
                                 this.reverseGeocode(fallbackLat, fallbackLng);
-                                this.triggerNotification("💻 Ubicación imprecisa (común en PC). Te ubicamos en Piura cerca del local para arrastrar el pin.");
+                                this.triggerNotification("💻 Ubicación imprecisa. Te ubicamos cerca de nuestro local en Piura para mover el pin.");
                             } else {
                                 if (this.map) {
                                     this.map.setView([lat, lng], 16);
@@ -360,13 +353,12 @@
                         },
                         (error) => {
                             console.error(error);
-                            this.triggerNotification("❌ No pudimos acceder a tu GPS. Activa tus permisos de ubicación.");
+                            this.triggerNotification("❌ No pudimos acceder al GPS. Activa tus permisos de ubicación.");
                         },
                         { enableHighAccuracy: true, timeout: 10000 }
                     );
                 },
 
-                // FUNCIÓN DE REVERSE GEOCODING PARA CONVERTIR COORDENADAS A DIRECCIÓN ESCRITA
                 async reverseGeocode(lat, lng) {
                     try {
                         const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`, {
@@ -393,7 +385,6 @@
                     }
                 },
 
-                // BUSCAR DIRECCIÓN ESCRITA MANUALMENTE Y MOVER EL MAPA
                 async geocodeAddress() {
                     if (!this.checkoutAddress.trim()) {
                         this.triggerNotification("⚠️ Escribe una dirección para buscarla.");
@@ -431,7 +422,6 @@
                     }
                 },
 
-                // BUSCAR DIRECCIÓN DE FORMA SILENCIOSA (ACTUALIZA GPS INCLUSO SI EL MAPA NO SE HA INICIADO)
                 async geocodeAddressSilently() {
                     if (!this.checkoutAddress.trim() || this.checkoutAddress.length < 5) {
                         return;
@@ -501,7 +491,6 @@
                                 item[header] = val;
                             });
                             
-                            // Sincronización de Horario Activo desde Sheet (Soporta TEST, TESTING, PRUEBAS, SIEMPRE)
                             if (item.id === 'horario' || (item.categoria === 'config' && item.nombre === 'Horario Activo')) {
                                 if (item.estado) {
                                     const val = item.estado.toUpperCase().trim();
@@ -512,7 +501,6 @@
                                 continue;
                             }
                             
-                            // Logo dinámico
                             if (item.id === 'logo' || item.categoria === 'logo' || item.nombre?.toLowerCase().includes('logo')) {
                                 if (item.imagen_url) {
                                     fetchedLogo = item.imagen_url;
@@ -555,8 +543,8 @@
 
                 openProductDetail(product) {
                     this.selectedProductForDetail = product;
-                    this.modalQuantity = 1; // Inicializar cantidad en 1 siempre
-                    this.detailCreamsSelections = [ [] ]; // Inicia con un arreglo de selección vacío para la primera unidad
+                    this.modalQuantity = 1; 
+                    this.detailCreamsSelections = [ [] ]; 
                     this.isDetailOpen = true;
                 },
 
@@ -576,7 +564,6 @@
                     if (!this.detailCreamsSelections[itemIndex]) {
                         this.detailCreamsSelections[itemIndex] = [];
                     }
-                    // Clonamos el array para forzar la reactividad en Alpine JS
                     let selection = [...this.detailCreamsSelections[itemIndex]];
                     const idx = selection.indexOf(cremaName);
                     if (idx > -1) {
@@ -607,10 +594,8 @@
                     const amount = parseInt(qty) || 1;
 
                     if (product.category === 'hamburguesas' || product.category === 'salchipapas') {
-                        // Insertar individualmente cada unidad del producto con sus cremas configuradas
                         for (let i = 0; i < amount; i++) {
                             const selectedCreams = this.detailCreamsSelections[i] || [];
-                            // Generamos un ID único combinando la ID de producto y el listado de cremas
                             const creamsKey = [...selectedCreams].sort().join(',');
                             const cartItemId = `${product.id}-${creamsKey}`;
 
@@ -632,7 +617,6 @@
                         }
                         this.triggerNotification(`🛒 Agregado: ${amount}x ${product.name} con sus cremas.`);
                     } else {
-                        // Productos normales (Bebidas, Extras, etc.)
                         const existingItem = this.cart.find(item => item.id === product.id);
                         if (existingItem) {
                             existingItem.quantity += amount;
@@ -713,12 +697,10 @@
                     }
 
                     setTimeout(async () => {
-                        // Coordenadas iniciales por defecto (Piura)
                         let defaultLat = -5.1764;
                         let defaultLng = -80.6406;
                         let coordsSet = false;
 
-                        // Intentar recuperar las coordenadas exactas de la última compra guardada
                         if (this.gpsCoords) {
                             const parts = this.gpsCoords.split(',');
                             if (parts.length === 2) {
@@ -732,7 +714,6 @@
                             }
                         }
 
-                        // Si no hay coordenadas GPS válidas pero sí una dirección escrita, geocodificamos primero
                         if (!coordsSet && this.checkoutAddress.trim()) {
                             await this.geocodeAddressSilently();
                             if (this.gpsCoords) {
@@ -766,20 +747,19 @@
                             icon: pinIcon
                         }).addTo(this.map);
 
-                        // Actualizar la distancia y costo del envío según la posición del marcador cargado
                         this.onMarkerMove(defaultLat, defaultLng);
 
                         this.marker.on('dragend', () => {
                             const pos = this.marker.getLatLng();
                             this.onMarkerMove(pos.lat, pos.lng);
-                            this.reverseGeocode(pos.lat, pos.lng); // Actualizar dirección al arrastrar pin
+                            this.reverseGeocode(pos.lat, pos.lng);
                         });
 
                         this.map.on('click', (e) => {
                             const pos = e.latlng;
                             this.marker.setLatLng(pos);
                             this.onMarkerMove(pos.lat, pos.lng);
-                            this.reverseGeocode(pos.lat, pos.lng); // Actualizar dirección al hacer clic
+                            this.reverseGeocode(pos.lat, pos.lng);
                         });
 
                     }, 250);
@@ -830,7 +810,6 @@
                         }
                     }
 
-                    // Validación de pago en Efectivo
                     if (this.checkoutPaymentMethod === 'cash') {
                         const amountToPayNum = parseFloat(this.cashAmountToPay);
                         const totalToPay = this.getCartTotalWithDelivery();
@@ -844,7 +823,6 @@
                         }
                     }
 
-                    // Forzar guardado inmediato al enviar si la opción está activa
                     if (this.saveUserData) {
                         this.saveProfileToLocalStorage();
                     }
@@ -864,14 +842,16 @@
                         msg += `🗺️ *Ubicación GPS:* https://www.google.com/maps/search/?api=1&query=${this.gpsCoords.replace(/\s/g, '')}\n`;
                         msg += `📏 *Distancia:* ${this.deliveryDistance.toFixed(2)} km\n`;
                     } else {
+                        // Incluyendo las coordenadas exactas de recojo en el mensaje de WhatsApp
                         msg += `🏢 *Punto de Recojo:* Santa María del Pinar Mz D lote 25, Av. Las Gardenias\n`;
+                        msg += `📍 *Coordenadas:* 5°10'08.7"S 80°37'58.6"W\n`;
+                        msg += `🗺️ *Mapa:* https://www.google.com/maps/place/5%C2%B010'08.7%22S+80%C2%B037'58.6%22W/@-5.169083,-80.632944,17z\n`;
                     }
 
                     if (this.checkoutNotes.trim()) {
                         msg += `📝 *Especificaciones:* ${this.checkoutNotes.trim()}\n`;
                     }
                     
-                    // Detallar método de pago en WhatsApp
                     if (this.checkoutPaymentMethod === 'yape') {
                         msg += `💵 *Método de Pago:* Yape (Joaquin Sanchez)\n\n`;
                     } else {
@@ -922,7 +902,6 @@
       :class="isCartOpen || isDetailOpen ? 'overflow-hidden h-screen' : ''" 
       x-init="initData()">
 
-    <!-- HEADER PRINCIPAL -->
     <header class="bg-white border-b border-bb-red/10 py-4 px-4 sticky top-0 z-40 shadow-sm">
         <div class="max-w-6xl mx-auto flex items-center justify-between">
             <div class="flex items-center gap-3">
@@ -959,7 +938,6 @@
         </div>
     </header>
 
-    <!-- BARRA DE MENSAJE Y TIEMPO REAL -->
     <div class="bg-bb-red text-white py-2.5 px-4 text-xs">
         <div class="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2">
             <div class="flex items-center gap-2">
@@ -1002,7 +980,7 @@
                 </div>
                 <div class="pt-2">
                     <button @click="scrollToMenu('hamburguesas')" class="px-6 py-3 bg-bb-red hover:bg-bb-red/90 text-white font-extrabold text-xs rounded-xl transition shadow-md">
-                        🔥 Ver Promociones de Hoy
+                        🔥 Ver Carta Brutal
                     </button>
                 </div>
             </div>
@@ -1015,7 +993,7 @@
         </div>
     </div>
 
-    <!-- CONTENIDO PRINCIPAL -->
+    <!-- CONTENIDO PRINCIPAL: CARTA -->
     <main class="max-w-6xl mx-auto px-4 py-8 md:py-12">
         <div class="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
             
@@ -1090,7 +1068,6 @@
         </div>
     </main>
 
-    <!-- MODAL DE DETALLE DE PRODUCTO CON SELECTOR DE CANTIDAD PREVIO Y LISTA DE CREMAS INDIVIDUALES -->
     <div x-show="isDetailOpen" 
          class="fixed inset-0 z-50 overflow-hidden flex items-center justify-center p-4 sm:p-6" 
          style="display: none;"
@@ -1134,9 +1111,8 @@
                 <h3 class="font-brand text-2xl text-bb-dark tracking-wide" x-text="selectedProductForDetail?.name"></h3>
                 <p class="text-xs sm:text-sm text-bb-shadow/80 font-semibold leading-relaxed" x-text="selectedProductForDetail?.description"></p>
                 
-                <!-- CONTROL INTERACTIVO DE CANTIDAD ANTES DE CONFIRMAR -->
                 <div class="flex items-center justify-between bg-bb-cream p-3 rounded-xl border border-bb-red/10">
-                    <span class="text-xs font-bold text-bb-dark" x-text="'¿Cuántas porciones brutales deseas?'"></span>
+                    <span class="text-xs font-bold text-bb-dark">¿Cuántas porciones brutales deseas?</span>
                     <div class="flex items-center gap-3 bg-white border border-bb-red/20 rounded-xl px-2.5 py-1">
                         <button type="button" @click="decreaseModalQty()" class="text-bb-red hover:text-bb-dark font-black px-1 text-sm"><i class="fa-solid fa-minus"></i></button>
                         <span class="text-sm font-black text-bb-dark min-w-[20px] text-center" x-text="modalQuantity"></span>
@@ -1144,7 +1120,7 @@
                     </div>
                 </div>
 
-                <!-- SECCIÓN DINÁMICA DE CREMAS INDIVIDUALES POR PRODUCTO (Disponible solo en Hamburguesas o Salchipapas) -->
+                <!-- Selección de cremas -->
                 <template x-if="selectedProductForDetail && (selectedProductForDetail.category === 'hamburguesas' || selectedProductForDetail.category === 'salchipapas')">
                     <div class="space-y-4 border-t border-bb-cream pt-4">
                         <h4 class="font-bold text-xs uppercase tracking-wider text-bb-red">🌶️ Selecciona tus cremas para cada porción:</h4>
@@ -1184,18 +1160,17 @@
         </div>
     </div>
 
-    <!-- SLIDE OVER / CAJÓN DE CARRITO Y CHECKOUT -->
     <div x-show="isCartOpen" class="fixed inset-0 z-50 overflow-hidden" style="display: none;">
         <div class="absolute inset-0 bg-black/60 backdrop-blur-xs transition-opacity" @click="isCartOpen = false"></div>
 
         <div class="absolute inset-y-0 right-0 max-w-full flex">
             <div class="w-screen max-w-lg bg-white flex flex-col h-full shadow-2xl border-l border-bb-red/10"
-                 x-transition:enter="transform transition ease-out duration-300"
-                 x-transition:enter-start="translate-x-full"
-                 x-transition:enter-end="translate-x-0"
-                 x-transition:leave="transform transition ease-in duration-200"
-                 x-transition:leave-start="translate-x-0"
-                 x-transition:leave-end="translate-x-full">
+                  x-transition:enter="transform transition ease-out duration-300"
+                  x-transition:enter-start="translate-x-full"
+                  x-transition:enter-end="translate-x-0"
+                  x-transition:leave="transform transition ease-in duration-200"
+                  x-transition:leave-start="translate-x-0"
+                  x-transition:leave-end="translate-x-full">
                 
                 <div class="p-4 sm:p-5 bg-bb-red text-white flex items-center justify-between flex-shrink-0">
                     <div class="flex items-center gap-2">
@@ -1220,11 +1195,11 @@
                     <button @click="errorMessage = ''" class="text-rose-500 font-bold px-2">X</button>
                 </div>
 
+                <!-- Lista interna del carrito o checkout -->
                 <div class="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 sm:space-y-6">
                     
-                    <!-- VISTA 1: CARRITO -->
+                    <!-- VISTA 1: LISTADO EN EL CARRITO -->
                     <div x-show="currentStep === 'cart'" class="space-y-4">
-                        <!-- BANNER ALERTA DE COCINA CERRADA -->
                         <div x-show="!isOpen" class="bg-rose-50 border border-rose-200 text-rose-800 rounded-xl p-3 text-xs font-semibold">
                             <p class="flex items-center gap-1.5 text-rose-800 font-extrabold uppercase tracking-wider text-[10px]">
                                 <i class="fa-solid fa-circle-exclamation"></i> Cocina Cerrada en este momento
@@ -1249,7 +1224,6 @@
                                     <div class="flex-1">
                                         <h4 class="font-bold text-xs md:text-sm text-bb-dark" x-text="item.name"></h4>
                                         
-                                        <!-- LISTADO VISUAL DE CREMAS SELECCIONADAS EN EL CARRITO -->
                                         <template x-if="item.creams && item.creams.length > 0">
                                             <p class="text-[10px] text-bb-red font-semibold leading-tight mt-1">
                                                 Cremas: <span class="text-bb-shadow/80" x-text="item.creams.join(', ')"></span>
@@ -1276,13 +1250,13 @@
                         </div>
                     </div>
 
-                    <!-- VISTA 2: FORMULARIO CHECKOUT CON MAPA -->
+                    <!-- VISTA 2: FORMULARIO CHECKOUT CON MAPAS GPS / RECOJO EN LOCAL -->
                     <div x-show="currentStep === 'checkout'" class="space-y-4 sm:space-y-5">
                         
                         <div class="bg-bb-red/5 p-3 sm:p-4 rounded-xl border border-bb-red/10 flex items-center justify-between gap-3">
                             <div class="flex-1">
                                 <h4 class="text-[10px] sm:text-xs font-black text-bb-red uppercase tracking-wider">💾 Guardar mis datos</h4>
-                                <p class="text-[9px] sm:text-[10px] text-bb-shadow/80 font-bold mt-0.5">Rellena el formulario automáticamente en tus próximas compras.</p>
+                                <p class="text-[9px] sm:text-[10px] text-bb-shadow/80 font-bold mt-0.5">Autocompletar en tus próximas visitas.</p>
                             </div>
                             <label class="relative inline-flex items-center cursor-pointer">
                                 <input type="checkbox" x-model="saveUserData" class="sr-only peer">
@@ -1297,29 +1271,30 @@
                                 <input type="text" x-model="checkoutName" placeholder="Tu nombre y apellido" class="w-full text-xs py-2.5 px-3 rounded-xl border border-bb-red/20 focus:border-bb-red focus:ring-1 focus:ring-bb-red outline-none bg-bb-cream font-semibold text-bb-dark">
                             </div>
                             <div>
-                                <label class="block text-[11px] font-extrabold text-bb-dark mb-1">Celular (9 dígitos, ej: 9XXXXXXXX) *</label>
+                                <label class="block text-[11px] font-extrabold text-bb-dark mb-1">Celular *</label>
                                 <input type="tel" x-model="checkoutPhone" maxlength="9" placeholder="912345678" class="w-full text-xs py-2.5 px-3 rounded-xl border border-bb-red/20 focus:border-bb-red focus:ring-1 focus:ring-bb-red outline-none bg-bb-cream font-semibold text-bb-dark">
                             </div>
                         </div>
 
                         <div class="space-y-3">
-                            <h3 class="font-brand text-xs sm:text-sm text-bb-red border-b border-bb-yellow pb-1 uppercase tracking-wider">Detalles del Envío</h3>
+                            <h3 class="font-brand text-xs sm:text-sm text-bb-red border-b border-bb-yellow pb-1 uppercase tracking-wider">Detalles de Entrega</h3>
                             <div>
                                 <label class="block text-[11px] font-extrabold text-bb-dark mb-1">Forma de Entrega *</label>
                                 <div class="grid grid-cols-2 gap-2 mb-2">
                                     <button @click="checkoutDeliveryType = 'delivery'" 
                                             :class="checkoutDeliveryType === 'delivery' ? 'bg-bb-red text-white font-bold' : 'bg-bb-cream text-bb-shadow'"
-                                            class="py-2 rounded-xl text-xs text-center transition font-semibold border border-bb-red/10">
-                                        🚗 Delivery
+                                            class="py-2.5 rounded-xl text-xs text-center transition font-semibold border border-bb-red/10">
+                                        🛵 Delivery
                                     </button>
                                     <button @click="checkoutDeliveryType = 'local'" 
                                             :class="checkoutDeliveryType === 'local' ? 'bg-bb-red text-white font-bold' : 'bg-bb-cream text-bb-shadow'"
-                                            class="py-2 rounded-xl text-xs text-center transition font-semibold border border-bb-red/10">
+                                            class="py-2.5 rounded-xl text-xs text-center transition font-semibold border border-bb-red/10">
                                         🏪 Recoger en Local
                                     </button>
                                 </div>
                             </div>
 
+                            <!-- INPUTS PARA DELIVERY -->
                             <div x-show="checkoutDeliveryType === 'delivery'" class="space-y-3">
                                 <div>
                                     <label class="block text-[11px] font-extrabold text-bb-dark mb-1">Dirección exacta *</label>
@@ -1328,7 +1303,7 @@
                                                x-model="checkoutAddress" 
                                                x-on:input.debounce.800ms="geocodeAddressSilently()"
                                                @keydown.enter.prevent="geocodeAddress()"
-                                               placeholder="Calle, Manzana, Lote o Número de Casa" 
+                                               placeholder="Calle, Manzana, Lote o Número" 
                                                class="flex-1 text-xs py-2.5 px-3 rounded-xl border border-bb-red/20 focus:border-bb-red outline-none bg-bb-cream font-semibold text-bb-dark">
                                         <button type="button" 
                                                 @click="geocodeAddress()" 
@@ -1347,47 +1322,79 @@
                                         <span>📍 Usar mi ubicación GPS actual</span>
                                     </button>
                                 </div>
+
+                                <div>
+                                    <label class="block text-[11px] font-extrabold text-bb-dark mb-1">Referencia <span class="text-gray-400 font-normal">(Opcional)</span></label>
+                                    <input type="text" x-model="checkoutReference" placeholder="Frente al parque, al costado de tienda, etc." class="w-full text-xs py-2.5 px-3 rounded-xl border border-bb-red/20 focus:border-bb-red outline-none bg-bb-cream font-semibold text-bb-dark">
+                                </div>
+
+                                <div class="space-y-1">
+                                    <label class="block text-[11px] font-extrabold text-bb-dark">Ubicación GPS (Haz Clic o Arrastra el Pin) *</label>
+                                    <div id="map" class="h-40 sm:h-56 rounded-2xl border-2 border-bb-red/20 overflow-hidden shadow-inner mt-1"></div>
+                                    
+                                    <div class="grid grid-cols-2 gap-2 mt-2">
+                                        <div class="flex flex-col bg-bb-cream p-2.5 rounded-xl border border-bb-red/10">
+                                            <span class="text-[9px] text-gray-400 font-extrabold uppercase">Distancia al Local</span>
+                                            <span class="text-xs font-black text-bb-dark" x-text="deliveryDistance ? `${deliveryDistance.toFixed(2)} km` : 'Calculando...'"></span>
+                                        </div>
+                                        <div class="flex flex-col bg-bb-cream p-2.5 rounded-xl border border-bb-red/10" :class="isOutOfRange ? 'bg-rose-50 border-rose-200' : ''">
+                                            <span class="text-[9px] text-gray-400 font-extrabold uppercase">Costo de Delivery</span>
+                                            <span class="text-xs font-black" :class="isOutOfRange ? 'text-rose-600' : 'text-bb-red'" 
+                                                  x-text="isOutOfRange ? 'Fuera de Rango' : `S/ ${deliveryCost.toFixed(2)}`"></span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div x-show="isOutOfRange" class="bg-rose-50 border border-rose-200 text-rose-800 rounded-xl p-3 text-xs font-semibold mt-2">
+                                        <p class="flex items-center gap-1.5 text-rose-800 font-extrabold uppercase tracking-wider text-[10px]">
+                                            <i class="fa-solid fa-triangle-exclamation"></i> Fuera de límite de delivery
+                                        </p>
+                                        <p class="text-rose-950/80">La ubicación supera nuestro límite máximo de cobertura de 9 km. Cambia tu punto o selecciona "Recoger en Local".</p>
+                                    </div>
+
+                                    <div class="flex items-center justify-between text-[9px] sm:text-[10px] text-bb-shadow/80 font-bold bg-bb-red/5 p-2 rounded-lg mt-1">
+                                        <span>📍 Coordenadas marcadas:</span>
+                                        <span class="text-bb-red font-mono" x-text="gpsCoords || 'Mueve el marcador en el mapa...'"></span>
+                                    </div>
+                                </div>
                             </div>
 
-                            <div x-show="checkoutDeliveryType === 'delivery'">
-                                <label class="block text-[11px] font-extrabold text-bb-dark mb-1">Referencia (ej: frente al parque) <span class="text-gray-400 font-normal">(Opcional)</span></label>
-                                <input type="text" x-model="checkoutReference" placeholder="Frente al parque, al costado de tienda, etc." class="w-full text-xs py-2.5 px-3 rounded-xl border border-bb-red/20 focus:border-bb-red outline-none bg-bb-cream font-semibold text-bb-dark">
-                            </div>
-
-                            <div x-show="checkoutDeliveryType === 'delivery'" class="space-y-1">
-                                <div class="flex items-center justify-between">
-                                    <label class="block text-[11px] font-extrabold text-bb-dark">Ubicación GPS (Haz Clic o Arrastra el Pin manualmente) *</label>
-                                </div>
-                                <div id="map" class="h-40 sm:h-56 rounded-2xl border-2 border-bb-red/20 overflow-hidden shadow-inner mt-1"></div>
+                            <!-- SECCIÓN DETALLE: RECOJO EN LOCAL (DIRECCIÓN Y COORDENADAS) -->
+                            <div x-show="checkoutDeliveryType === 'local'" class="space-y-3"
+                                 x-transition:enter="transition ease-out duration-200"
+                                 x-transition:enter-start="opacity-0 translate-y-2"
+                                 x-transition:enter-end="opacity-100 translate-y-0">
                                 
-                                <div class="grid grid-cols-2 gap-2 mt-2">
-                                    <div class="flex flex-col bg-bb-cream p-2.5 rounded-xl border border-bb-red/10">
-                                        <span class="text-[9px] text-gray-400 font-extrabold uppercase">Distancia al Local</span>
-                                        <span class="text-xs font-black text-bb-dark" x-text="deliveryDistance ? `${deliveryDistance.toFixed(2)} km` : 'Calculando...'"></span>
+                                <div class="bg-bb-red/5 p-4 rounded-2xl border border-bb-red/10 space-y-3 text-left">
+                                    <div class="flex items-start gap-3">
+                                        <div class="p-2.5 bg-bb-red/10 text-bb-red rounded-xl mt-0.5 flex-shrink-0">
+                                            <i class="fa-solid fa-shop text-lg"></i>
+                                        </div>
+                                        <div class="flex-1 space-y-1.5">
+                                            <h4 class="text-xs font-black text-bb-red uppercase tracking-wider">🏪 Dirección de recojo en local</h4>
+                                            <p class="text-xs font-bold text-bb-dark leading-tight">Santa María del Pinar Mz D lote 25, Av. Las Gardenias, Piura</p>
+                                            
+                                            <!-- Tarjeta de Coordenadas requerida por el usuario -->
+                                            <div class="bg-white p-2.5 rounded-xl border border-bb-red/5 flex flex-col gap-1 shadow-2xs">
+                                                <span class="text-[9px] text-gray-400 font-extrabold uppercase leading-none">Coordenadas Exactas</span>
+                                                <span class="text-xs font-black text-bb-red font-mono select-all select-none">5°10'08.7"S 80°37'58.6"W</span>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div class="flex flex-col bg-bb-cream p-2.5 rounded-xl border border-bb-red/10" :class="isOutOfRange ? 'bg-rose-50 border-rose-200' : ''">
-                                        <span class="text-[9px] text-gray-400 font-extrabold uppercase">Costo de Delivery</span>
-                                        <span class="text-xs font-black" :class="isOutOfRange ? 'text-rose-600' : 'text-bb-red'" 
-                                              x-text="isOutOfRange ? 'Fuera de Rango' : `S/ ${deliveryCost.toFixed(2)}`"></span>
-                                    </div>
-                                </div>
-                                
-                                <div x-show="isOutOfRange" class="bg-rose-50 border border-rose-200 text-rose-800 rounded-xl p-3 text-xs font-semibold mt-2">
-                                    <p class="flex items-center gap-1.5 text-rose-800 font-extrabold uppercase tracking-wider text-[10px]">
-                                        <i class="fa-solid fa-triangle-exclamation"></i> Fuera de límite de delivery
-                                    </p>
-                                    <p class="text-rose-950/80">Lo sentimos, la ubicación supera nuestro límite máximo de cobertura de 9 km. Por favor, selecciona un punto más cercano o cámbiate a "Recoger en Local".</p>
-                                </div>
-
-                                <div class="flex items-center justify-between text-[9px] sm:text-[10px] text-bb-shadow/80 font-bold bg-bb-red/5 p-2 rounded-lg mt-1">
-                                    <span>📍 Coordenadas marcadas:</span>
-                                    <span class="text-bb-red font-mono" x-text="gpsCoords || 'Mueve el marcador en el mapa...'"></span>
+                                    
+                                    <!-- Botón interactivo para abrir en Google Maps -->
+                                    <a href="https://www.google.com/maps/place/5%C2%B010'08.7%22S+80%C2%B037'58.6%22W/@-5.169083,-80.632944,17z" 
+                                       target="_blank" 
+                                       rel="noopener noreferrer" 
+                                       class="w-full py-2.5 px-4 bg-bb-yellow hover:bg-bb-yellow/90 text-bb-dark font-extrabold text-xs rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-xs transform active:scale-98">
+                                        <i class="fa-solid fa-map-location-dot text-sm"></i>
+                                        <span>Abrir ubicación en Google Maps</span>
+                                    </a>
                                 </div>
                             </div>
                         </div>
 
                         <div>
-                            <label class="block text-[11px] font-extrabold text-bb-dark mb-1">Notas especiales para la cocina (Opcional)</label>
+                            <label class="block text-[11px] font-extrabold text-bb-dark mb-1">Notas especiales para la cocina <span class="text-gray-400 font-normal">(Opcional)</span></label>
                             <input type="text" x-model="checkoutNotes" placeholder="Ej: Sin cebolla, cremas aparte, etc." class="w-full text-xs py-2.5 px-3 rounded-xl border border-bb-red/20 focus:border-bb-red outline-none bg-bb-cream font-semibold text-bb-dark">
                         </div>
 
@@ -1395,7 +1402,6 @@
                         <div class="space-y-4 bg-bb-cream p-4 rounded-3xl border border-bb-red/10 shadow-xs text-left">
                             <h4 class="text-xs font-brand text-bb-red uppercase tracking-wider">Método de Pago</h4>
                             
-                            <!-- Botones de selección de método -->
                             <div class="grid grid-cols-2 gap-3 bg-white p-1.5 rounded-full border border-bb-red/10">
                                 <!-- Yape Tab -->
                                 <button type="button" 
@@ -1457,7 +1463,6 @@
                                                class="w-full text-xs py-2.5 pl-8 pr-3 rounded-xl border border-bb-red/20 focus:border-[#15803d] focus:ring-1 focus:ring-[#15803d] outline-none bg-bb-cream font-bold text-bb-dark">
                                     </div>
                                     
-                                    <!-- Calculadora dinámica de vuelto -->
                                     <div class="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-left" x-show="Number(cashAmountToPay) > 0">
                                         <template x-if="Number(cashAmountToPay) >= getCartTotalWithDelivery()">
                                             <p class="text-emerald-800 font-semibold flex justify-between items-center">
@@ -1474,12 +1479,11 @@
                                 </div>
                             </div>
 
-                            <!-- Nota informativa según selección -->
                             <p x-show="checkoutPaymentMethod === 'yape'" class="text-[10px] text-bb-shadow/80 font-bold text-center leading-normal mt-1">
-                                Copia el número arriba, ingresa a tu Yape para realizar el pago del total y envía el comprobante en tu chat de WhatsApp al finalizar.
+                                Copia el número arriba, realiza el pago en Yape del total y envía la captura de pantalla por WhatsApp al confirmar.
                             </p>
                             <p x-show="checkoutPaymentMethod === 'cash'" class="text-[10px] text-bb-shadow/80 font-bold text-center leading-normal mt-1">
-                                Por favor, procura tener el dinero listo al recibir tu pedido para agilizar la entrega en casa.
+                                Procura tener el dinero listo al recibir tu pedido para agilizar la entrega.
                             </p>
                         </div>
                     </div>
@@ -1500,7 +1504,7 @@
                     </div>
 
                     <div>
-                        <!-- ACCIONES VISTA 1: CARRITO -->
+                        <!-- ACCONES VISTA 1: CARRITO -->
                         <div x-show="currentStep === 'cart'" class="space-y-3">
                             <div class="flex justify-between text-sm sm:text-base font-black text-bb-red pt-1 border-t border-bb-cream/60">
                                 <span>Total a pagar:</span>
